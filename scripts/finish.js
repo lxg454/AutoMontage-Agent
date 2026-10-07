@@ -3,6 +3,7 @@
 //   node finish.js <in.mp4> <out.mp4> [--hdrfix auto|on|off] [--sharpen] [--lanczos WxH]
 const { finiteNumber, optionValue } = require('./build-options');
 const { buildFinishAudioFilter } = require('./finish-audio');
+const { h264EncoderArgs, runH264 } = require('./gpu');
 const {
   captureTool,
   captureToolResult,
@@ -51,7 +52,7 @@ function hdrProbeCommand(input) {
   };
 }
 
-function finishEncodeCommand(input, output, options, isHDR) {
+function finishEncodeCommand(input, output, options, isHDR, { nvenc = false } = {}) {
   const doHDR = options.hdrMode === 'on' || (options.hdrMode === 'auto' && isHDR);
   const videoFilters = [];
   if (doHDR) {
@@ -71,7 +72,7 @@ function finishEncodeCommand(input, output, options, isHDR) {
 
   const args = ['-y', '-i', hostPath(input)];
   if (videoFilters.length) {
-    args.push('-vf', videoFilters.join(','), '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p');
+    args.push('-vf', videoFilters.join(','), ...h264EncoderArgs({ crf: 20, preset: 'medium', nvenc, pixFmt: false }), '-pix_fmt', 'yuv420p');
   } else {
     args.push('-c:v', 'copy');
   }
@@ -115,9 +116,14 @@ function main(args = process.argv.slice(2)) {
       console.warn(`⚠️ HDR probe не сработал: ${error.message}`);
     }
   }
-  const command = finishEncodeCommand(input, output, options, isHDR);
+  let command = finishEncodeCommand(input, output, options, isHDR);
   console.log(`финиш: loudnorm=-14LUFS${options.audioAdvanceMs ? ` + звук вперёд ${options.audioAdvanceMs}мс` : ''}${command.doHDR ? ' + HDR→SDR' : ''}${options.sharpen ? ' + sharpen' : ''}${options.lanczos ? ' + lanczos' : ''}`);
-  runTool(command.command, command.args, { stage: 'finish encode' });
+  // Без видеофильтров видео копируется – кодер не нужен; иначе NVENC с откатом на libx264.
+  const reencodes = command.args.includes('-vf');
+  runH264((nvenc) => {
+    command = finishEncodeCommand(input, output, options, isHDR, { nvenc });
+    return command;
+  }, { run: runTool, stage: 'finish encode', ...(reencodes ? {} : { nvenc: false }) });
 
   try {
     const loudness = loudnessCommand(output);

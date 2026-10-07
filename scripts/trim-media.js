@@ -5,6 +5,7 @@ const { randomUUID } = require('node:crypto');
 
 const { finiteNumber } = require('./build-options');
 const { captureTool, hostPath, runTool } = require('./process');
+const { h264EncoderArgs, runH264 } = require('./gpu');
 
 const MODERN_FILTER_SCRIPT_OPTION = '-/filter_complex';
 const LEGACY_FILTER_SCRIPT_OPTION = '-filter_complex_script';
@@ -17,6 +18,14 @@ const ENCODERS = Object.freeze({
   proxy: Object.freeze(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart']),
 });
+
+// Те же режимы на NVENC: пресет той же «цены», -cq со сдвигом от -crf (см. h264EncoderArgs).
+function encoderArgs(encoder, nvenc) {
+  if (!nvenc) return ENCODERS[encoder];
+  if (encoder === 'master') return [...h264EncoderArgs({ crf: 20, preset: 'veryfast', nvenc }), '-c:a', 'aac'];
+  return [...h264EncoderArgs({ crf: 26, preset: 'ultrafast', nvenc }),
+    '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'];
+}
 
 function validateIntervals(intervals) {
   if (!Array.isArray(intervals) || intervals.length === 0) {
@@ -155,6 +164,7 @@ function detectFilterScriptOption({ capture = captureTool } = {}) {
 function filterScriptCommand(inputs, output, filterPath, {
   filterScriptOption = MODERN_FILTER_SCRIPT_OPTION,
   encoder = 'master',
+  nvenc = false,
 } = {}) {
   if (!Array.isArray(inputs) || inputs.length === 0) {
     throw new Error('нужен хотя бы один входной файл');
@@ -171,7 +181,7 @@ function filterScriptCommand(inputs, output, filterPath, {
       filterScriptOption, hostPath(filterPath),
       '-map', '[vout]',
       '-map', '[aout]',
-      ...ENCODERS[encoder],
+      ...encoderArgs(encoder, nvenc),
       hostPath(output),
     ],
   };
@@ -190,15 +200,20 @@ function runFilterScript({ inputs, output, filter, filterPath, stage, encoder = 
   run = runTool,
   filterScriptOption = null,
   detectOption = detectFilterScriptOption,
+  nvenc = undefined,
+  warn = console.warn,
 } = {}) {
   const resolvedFilterPath = hostPath(filterPath);
   try {
     fileSystem.writeFileSync(resolvedFilterPath, filter);
-    const command = filterScriptCommand(inputs, output, resolvedFilterPath, {
-      filterScriptOption: filterScriptOption || detectOption(),
-      encoder,
-    });
-    run(command.command, command.args, { stage });
+    const option = filterScriptOption || detectOption();
+    let command;
+    runH264((useNvenc) => {
+      command = filterScriptCommand(inputs, output, resolvedFilterPath, {
+        filterScriptOption: option, encoder, nvenc: useNvenc,
+      });
+      return command;
+    }, { run, stage, warn, ...(nvenc === undefined ? {} : { nvenc }) });
     return command;
   } finally {
     if (fileSystem.existsSync(resolvedFilterPath)) fileSystem.unlinkSync(resolvedFilterPath);

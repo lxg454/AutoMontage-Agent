@@ -8,3 +8,7 @@ if (process.env.NODE_TEST_CONTEXT || !process.env.AUTOMONTAGE_HEAVY_DIR) {
   process.env.AUTOMONTAGE_HEAVY_DIR = dir;
   process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
 }
+
+// Видеокарта выключена во всех тестах: команды ffmpeg и Remotion не зависят от того, есть ли на машине
+// NVIDIA. Ветку NVENC проверяют отдельные тесты, передавая nvenc явно.
+process.env.AUTOMONTAGE_GPU = 'off';

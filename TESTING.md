@@ -305,6 +305,13 @@ AUTOMONTAGE_FFMPEG_DIR="$(brew --prefix ffmpeg-full)/bin" npm run doctor
 Chromium нужен только для browser tests и пересборки PNG через Playwright, не для обычного
 рендера.
 
+Последняя строка `doctor` – ускорение на видеокарте: режим Chromium Remotion и кодер H.264
+(NVENC или `libx264`) отдельно для ffmpeg Remotion и для ffmpeg движка. Тесты (`npm test`)
+всегда идут с `AUTOMONTAGE_GPU=off` (`tests/helpers/heavy-queue-isolation.cjs`), поэтому команды
+не зависят от машины; ветку NVENC покрывает `tests/gpu.test.js` явной передачей `nvenc`. Живая
+проверка на машине с NVIDIA: один и тот же рендер с `AUTOMONTAGE_GPU=auto` и `off`, сравнить время,
+`ffprobe` (`pix_fmt=yuv420p`, у слоя `color_range=tv`) и PSNR между ними (среднее ≥ 45 дБ).
+
 ## 3. Воспроизводимый демо-рендер
 
 ```bash

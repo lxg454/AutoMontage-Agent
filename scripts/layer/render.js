@@ -19,6 +19,7 @@ const { probeMediaPath, probeVideo } = require('../media-probe');
 const { hashBytes } = require('../pult/files');
 const { runTool, captureTool } = require('../process');
 const { LIMITED_RANGE_ENV } = require('../remotion-ffmpeg-override');
+const { h264EncoderArgs, runH264 } = require('../gpu');
 const { acquireHeavySlot, heavyQueueConfig } = require('../heavy-queue');
 const { decodeAudio, envelopeDb } = require('../qa/audio');
 const { gateLayerDuration, gateVoiceLeak } = require('../qa/media-gates');
@@ -92,9 +93,9 @@ const AUDIO_RATE = 48000;
 // тишина), apad + atrim дополняют и режут ровно до durationInFrames/fps. Режется только звук: -t или
 // -shortest обрезали бы и видео и спрятали бы слишком длинный рендер от G6. Без звуковой дорожки -af не
 // применяется.
-function normalizeArgs(raw, out, samples) {
+function normalizeArgs(raw, out, samples, { nvenc = false } = {}) {
   return ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw,
-    '-vf', 'scale=out_range=tv,format=yuv420p', '-c:v', 'libx264', '-preset', 'medium', '-crf', '14',
+    '-vf', 'scale=out_range=tv,format=yuv420p', ...h264EncoderArgs({ crf: 14, preset: 'medium', nvenc }),
     '-af', `aresample=${AUDIO_RATE}:async=1:first_pts=0,apad,atrim=end_sample=${samples}`,
     '-c:a', 'aac', '-b:a', '192k', '-ar', String(AUDIO_RATE), '-ac', '2', out];
 }
@@ -178,8 +179,12 @@ function renderClaimed({ projectDir, layerName, sourcePath, profile, profileName
     const conforming = video?.pix_fmt === 'yuv420p' && video?.color_range === 'tv';
     if (!conforming) warn('Remotion отдал full range – перекодирую видео');
     try {
-      const args = (conforming ? normalizeAudioArgs : normalizeArgs)(claim.raw, claim.out, samples);
-      runToolImpl('ffmpeg', args, { cwd: ROOT, stage: 'layer normalize' });
+      if (conforming) {
+        runToolImpl('ffmpeg', normalizeAudioArgs(claim.raw, claim.out, samples), { cwd: ROOT, stage: 'layer normalize' });
+      } else {
+        runH264((nvenc) => ({ command: 'ffmpeg', args: normalizeArgs(claim.raw, claim.out, samples, { nvenc }) }),
+          { run: runToolImpl, warn, stage: 'layer normalize', options: { cwd: ROOT } });
+      }
     } catch (caught) {
       fs.rmSync(claim.out, { force: true }); // недописанный слой этого номера – наш, после отказа он не нужен
       throw caught;
@@ -225,4 +230,4 @@ function renderClaimed({ projectDir, layerName, sourcePath, profile, profileName
   return exitCode;
 }
 
-module.exports = { FLAGS, claimRender, run };
+module.exports = { FLAGS, claimRender, normalizeArgs, run };

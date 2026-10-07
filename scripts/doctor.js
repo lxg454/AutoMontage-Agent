@@ -101,6 +101,19 @@ const hasChromium = tryRun('chromium', ['--version']) || tryRun('chromium-browse
 if (hasChromium) ok(`Chromium (${hasChromium}), для пересборки картинок-плашек`);
 else warn('Chromium не найден. Нужен только если пересобираешь картинки-плашки (shot-*.js). Для базового монтажа не требуется');
 
+// 8. Видеокарта (AUTOMONTAGE_GPU): без неё всё работает на процессоре, только медленнее
+try {
+  const { describeGpu, detectGpu, gpuMode, remotionFfmpegPath } = require('./gpu');
+  const scripts = detectGpu();
+  const remotion = detectGpu({ ffmpeg: remotionFfmpegPath() || 'ffmpeg' });
+  if (gpuMode() === 'off') ok('видеокарта выключена (AUTOMONTAGE_GPU=off): рендер и кодирование на процессоре');
+  else if (scripts.nvenc || remotion.nvenc || remotion.gl) {
+    ok(`ускорение на видеокарте: Remotion – ${describeGpu(remotion)}; ffmpeg движка – ${scripts.nvenc ? 'NVENC' : 'libx264 (CPU)'}`);
+  } else ok('аппаратный H.264 (NVENC) не найден: кодирование на процессоре (libx264)');
+} catch (error) {
+  warn(error.message);
+}
+
 // итог
 console.log('');
 if (fails) { console.log(`\x1b[31m${fails} критичн. проблем(ы)\x1b[0m${warns ? `, ${warns} предупрежд.` : ''}. Монтаж не запустится, пока не устранишь FAIL.\n`); process.exit(1); }
