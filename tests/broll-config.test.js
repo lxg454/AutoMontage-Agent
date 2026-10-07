@@ -68,3 +68,20 @@ test('dotenv provider is validated even with environment key and can be overridd
     { provider: 'pexels', apiKey: 'environment' },
   );
 });
+test('Pixabay key alone selects Pixabay; Pexels keeps priority when both keys exist', (t) => {
+  assert.deepEqual(loadBrollConfig({ env: { PIXABAY_API_KEY: 'pix' } }), { provider: 'pixabay', apiKey: 'pix' });
+  assert.deepEqual(loadBrollConfig({ env: { PIXABAY_API_KEY: 'pix', PEXELS_API_KEY: 'pex' } }), { provider: 'pexels', apiKey: 'pex' });
+  assert.deepEqual(
+    loadBrollConfig({ env: { PIXABAY_API_KEY: 'pix', PEXELS_API_KEY: 'pex', BROLL_SEARCH_PROVIDER: 'pixabay' } }),
+    { provider: 'pixabay', apiKey: 'pix' },
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'broll-pixabay-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, '.env'), 'PIXABAY_API_KEY="local-pix"\r\nOTHER=1\r\n');
+  assert.deepEqual(loadBrollConfig({ root, env: {} }), { provider: 'pixabay', apiKey: 'local-pix' });
+});
+test('explicit provider without its own key is a missing key, never another provider key', () => {
+  assert.throws(() => loadBrollConfig({ env: { PEXELS_API_KEY: 'pex', BROLL_SEARCH_PROVIDER: 'pixabay' } }), { code: 'BROLL_KEY_MISSING' });
+  assert.throws(() => loadBrollConfig({ env: { PIXABAY_API_KEY: 'pix', BROLL_SEARCH_PROVIDER: 'pexels' } }), { code: 'BROLL_KEY_MISSING' });
+  assert.throws(() => loadBrollConfig({ env: { PIXABAY_API_KEY: 'bad key' } }), { code: 'BROLL_CONFIG_INVALID', message: 'BROLL_CONFIG_INVALID' });
+});

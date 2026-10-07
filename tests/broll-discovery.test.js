@@ -336,3 +336,51 @@ test('rejecting one candidate does not cancel another candidate proxy in the sam
   assert.equal(results[0].reason.code, 'BROLL_REMOTE_ABORTED');
   assert.equal(results[1].status, 'fulfilled');
 });
+test('Pixabay candidate downloads only from Pixabay hosts and imports as pixabay-<id>', async () => {
+  const pixabay = {
+    ...candidate,
+    provider: 'pixabay',
+    providerAssetId: '2592859',
+    sourcePage: 'https://pixabay.com/photos/bokeh-2592859/',
+    author: { name: 'StockSnap', url: 'https://pixabay.com/users/894430/' },
+    license: { name: 'Pixabay Content License', url: 'https://pixabay.com/service/license-summary/' },
+    rendition: { id: 'large', width: 1024, height: 1280, mimeType: 'image/jpeg' },
+    thumbnailUrl: 'https://cdn.pixabay.com/photo/2017/08/06/14/12/bokeh-2592859_150.jpg',
+    previewUrl: 'https://pixabay.com/get/g747_640.jpg',
+    downloadUrl: 'https://pixabay.com/get/g5de_1280.jpg',
+  };
+  const hosts = [];
+  let filename;
+  const { discovery } = fixture({
+    provider: { search: async () => ({ candidates: [pixabay], nextPage: null }) },
+    download: async ({ allowedHosts }) => {
+      hosts.push(allowedHosts);
+      return { bytes: Buffer.from('ffd8ffe0', 'hex'), contentType: 'image/jpeg' };
+    },
+    importMedia: async (options) => {
+      for await (const chunk of options.request) assert.ok(chunk.length);
+      assert.equal(options.provenance.provider, 'pixabay');
+      filename = options.headers['x-automontage-filename'];
+      return { id: 'imported' };
+    },
+  });
+  const shelf = await discovery.search(query);
+  const card = shelf.candidates[0];
+  await discovery.proxy(card.id, 'thumbnail');
+  await discovery.select({ ...snapshot, sceneIndex: 0, searchId: shelf.searchId, candidateId: card.id });
+  assert.equal(filename, 'pixabay-2592859.jpg');
+  for (const list of hosts) {
+    assert.ok(list.includes('cdn.pixabay.com'));
+    assert.ok(!list.some((host) => host.includes('pexels') || host.includes('vimeo')));
+  }
+});
+test('candidate of an unknown provider cannot be downloaded', async () => {
+  const { discovery, calls } = fixture({
+    provider: { search: async () => ({ candidates: [{ ...candidate, provider: 'unknown' }], nextPage: null }) },
+  });
+  const shelf = await discovery.search(query).catch(() => null);
+  if (shelf?.candidates?.[0]) {
+    await assert.rejects(discovery.proxy(shelf.candidates[0].id, 'thumbnail'));
+  }
+  assert.equal(calls.length, 0);
+});

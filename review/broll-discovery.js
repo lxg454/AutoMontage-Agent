@@ -4,10 +4,12 @@ function node(tag, text, className) {
   if (className) result.className = className;
   return result;
 }
+// Страницы источника, автора и лицензии – только сайты поддерживаемых стоков.
+const PUBLIC_HOSTS = ['pexels.com', 'www.pexels.com', 'pixabay.com'];
 function publicLink(label, address) {
   try {
     const url = new URL(address);
-    if (url.protocol !== 'https:' || url.username || url.password || url.port || !['pexels.com', 'www.pexels.com'].includes(url.hostname)) return node('span', label);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !PUBLIC_HOSTS.includes(url.hostname)) return node('span', label);
     const link = node('a', label);
     link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
     return link;
@@ -82,7 +84,8 @@ export function createBrollDiscoveryUI({ request, getState, queueCommand, refres
     try { await operation(); }
     catch (error) {
       e.status.textContent = error?.code === 'BROLL_KEY_MISSING'
-        ? 'Добавьте PEXELS_API_KEY в локальный файл .env и перезапустите Review. Не отправляйте ключ в чат.'
+        ? 'Добавьте PIXABAY_API_KEY или PEXELS_API_KEY в локальный файл .env и перезапустите Review. Не отправляйте ключ в чат.'
+        : error?.code === 'BROLL_RATE_LIMITED' ? 'Сток просит подождать: слишком много запросов подряд. Повторите поиск через минуту.'
         : error?.status === 409 ? 'Проект или подбор изменился. Обновите подбор после разрешения конфликта.' : failureText;
       if (error?.status === 409) await reportError(error);
     } finally { e.busy = false; setBusy(false); update(e); }

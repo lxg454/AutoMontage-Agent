@@ -36,3 +36,13 @@ The public regression suite verifies these boundaries:
 The review found no high or critical dependency advisory and Gitleaks found no secret in the
 feature commits. OCR remains a warning system rather than a proof that an image has no text or
 logo, so the full visual preview and explicit human approval remain mandatory.
+
+## Pixabay stock provider
+
+Pixabay ([#91](https://github.com/mcdenil-skills/AutoMontage-Agent/issues/91)) is the second
+B-roll provider next to Pexels. Its API accepts the key only as the `key` query parameter, so
+`PIXABAY_API_KEY` is sent only to `https://pixabay.com/api/…` with redirects disabled. It is
+never sent to the Pixabay CDN, never placed in candidates, error messages, logs, `SOURCE.md`, or
+the browser, and it is removed from preview and Remotion child environments like
+`PEXELS_API_KEY`. The in-memory search cache is keyed by a SHA-256 of the API key, not the key
+itself. The Pexels key is still sent only in the `Authorization` header to `api.pexels.com`.

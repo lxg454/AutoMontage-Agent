@@ -77,7 +77,7 @@ test('missing key produces exact skip without search or remote work', async () =
     },
   });
   await main([], h.deps);
-  assert.deepEqual(h.logs, ['SKIPPED: PEXELS_API_KEY is not configured']);
+  assert.deepEqual(h.logs, ['SKIPPED: PEXELS_API_KEY or PIXABAY_API_KEY is not configured']);
   assert.equal(h.requests.length, 0);
 });
 test('search-only probes bounded renditions, never downloads full or imports', async () => {

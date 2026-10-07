@@ -95,8 +95,9 @@ override и команды mux/copy), `layer-import.test.js` и `review-media-im
   global ripple, opaque asset handles, fit/start/audio commands, покадровый clip overrun,
   frame/word timing reasons, межпроцессный project lease, in-memory undo/redo, новая draft-пара
   на Save, manifest-last visibility и byte-identical approved;
-- discovery B-roll: draft-only intent и заглушка preview, официальный Pexels photo/video contract
-  через локальный mock HTTP server, HTTPS/DNS pinning/redirect SSRF, ограниченный поток/MIME,
+- discovery B-roll: draft-only intent и заглушка preview, официальный Pexels и Pixabay
+  photo/video contract через локальный mock HTTP server, выбор провайдера по ключу, кеш и пауза
+  между запросами Pixabay, HTTP 429 с `Retry-After`, HTTPS/DNS pinning/redirect SSRF, ограниченный поток/MIME,
   timeout/abort/truncation, отсутствие ключа и отсутствие его утечки в ошибках/карточках;
 - candidate allowlist: session/scene/query/generation/TTL, cross-session и подменённые ID,
   preview без скачивания полного файла, загрузка только выбранной rendition, stale Save/import;
@@ -628,13 +629,13 @@ workflow закреплены по неизменяемому commit SHA, что
 
 ## 10. B-roll Discovery: локальный acceptance
 
-Все быстрые контракты работают без ключа Pexels. HTTP fixtures проверяют официальный формат
+Все быстрые контракты работают без ключей Pexels и Pixabay. HTTP fixtures проверяют официальный формат
 ответа через явно внедрённый тестовый transport; production host/DNS admission остаётся включён.
 В CI нет live-поиска, ключей и платных вызовов.
 
 ```bash
 node --test tests/broll-intent.test.js
-node --test tests/broll-remote.test.js tests/broll-pexels.test.js tests/broll-candidates.test.js tests/broll-config.test.js
+node --test tests/broll-remote.test.js tests/broll-pexels.test.js tests/broll-pixabay.test.js tests/broll-candidates.test.js tests/broll-config.test.js tests/broll-live-acceptance.test.js
 node --test tests/broll-provenance.test.js tests/broll-text-scan.test.js tests/review-imported-assets.test.js tests/review-media-import.test.js tests/review-media-process.test.js
 node --test tests/broll-discovery.test.js tests/broll-review-security.test.js tests/broll-approval.test.js
 node --test tests/broll-preview-approval.test.js
@@ -661,7 +662,18 @@ preview сразу роняет тест с кодом ошибки и хвос�
 final render и полный decode. Такие рендеры запускаются последовательно, чтобы не делить legacy
 render временные файлы. Успех mock-плеера не засчитывается как Remotion acceptance.
 
-Live-команда без ключа печатает ровно `SKIPPED: PEXELS_API_KEY is not configured`.
+`tests/broll-pixabay.test.js` проверяет клиент Pixabay: параметры запросов фото и видео, отбор
+по ориентации, выбор rendition, 24-часовой кеш с SHA-256 ключа, паузу между запросами, повторы
+на HTTP 429 и то, что ключ уходит только на `pixabay.com/api` и не попадает в кандидатов и
+ошибки. `tests/broll-config.test.js` закрывает выбор провайдера (явный, по ключу, Pexels при обоих,
+`BROLL_KEY_MISSING` без подстановки чужого ключа), `tests/broll-remote.test.js` – 429 с
+`Retry-After` и отсутствие `Authorization` в запросах к Pixabay, `tests/broll-discovery.test.js` –
+хосты и имя файла `pixabay-<id>`, `tests/layer-stock.test.js` – клип Pixabay, несовпадение
+провайдера и утечку ключа.
+
+Live-команда работает с тем провайдером, которого выбирает `config.js`, и первой строкой
+печатает `provider: <имя>`. Без ключа она печатает ровно
+`SKIPPED: PEXELS_API_KEY or PIXABAY_API_KEY is not configured`.
 Это единственный пропуск внешнего acceptance; локальные unit, HTTP contract и браузерные проверки
 продолжаются. При ключе команда выполняет бесплатный поиск фото/видео и ограниченный preview.
 Полную rendition она импортирует только при явном `--select image:<id>` или `--select video:<id>`
@@ -669,7 +681,7 @@ Live-команда без ключа печатает ровно `SKIPPED: PEXE
 
 Для необязательного semantic reranker есть отдельный [воспроизводимый эксперимент](docs/research/2026-09-08-broll-reranking-benchmark.md).
 Его Python/model dependencies не входят в основной монтаж или CI; текущий default - релевантность
-провайдера. Openverse-эксперимент не заменяет live acceptance Pexels.
+провайдера. Openverse-эксперимент не заменяет live acceptance Pexels или Pixabay.
 
 ## MotionReel: сцены, тайминг и кириллица
 

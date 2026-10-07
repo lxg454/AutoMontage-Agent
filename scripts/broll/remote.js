@@ -69,6 +69,14 @@ async function requestRemote({url, allowedHosts, headers = {}, signal, maxBytes,
             try { resolve({redirect:validateUrl(new URL(location, current).href, allowedHosts)}); } catch { reject(failure()); }
             return;
           }
+          // 429: провайдер просит подождать – отдельный код, чтобы человек видел понятную причину.
+          // Retry-After – только целые секунды 0–60; иначе провайдер решает сам (retryAfterSec: null).
+          if (response.statusCode === 429) {
+            const header = String(response.headers['retry-after'] || '');
+            const retryAfterSec = /^\d{1,2}$/.test(header) && Number(header) <= 60 ? Number(header) : null;
+            reject(Object.assign(failure('BROLL_REMOTE_RATE_LIMITED'), {retryAfterSec}));
+            response.on('error', () => {}); response.destroy(); return;
+          }
           response.on('error', bad); response.on('aborted', bad);
           const type = String(response.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
           const encoding = response.headers['content-encoding'];
@@ -98,6 +106,7 @@ async function requestRemote({url, allowedHosts, headers = {}, signal, maxBytes,
       if (signal?.aborted) abort();
     })]);
   } catch (error) {
+    if (error?.code === 'BROLL_REMOTE_RATE_LIMITED') throw Object.assign(failure(error.code), {retryAfterSec: error.retryAfterSec ?? null});
     throw failure(['BROLL_REMOTE_ABORTED','BROLL_REMOTE_TIMEOUT'].includes(error?.code) ? error.code : 'BROLL_REMOTE_REJECTED');
   } finally {
     settled = true; clearTimeout(timer); signal?.removeEventListener('abort', abort);

@@ -247,7 +247,7 @@ Master – один раз из оригинала: `--edit edit/roughcut-vNN.js
    отдай одно задание: `skills/reel-turnkey/references/motion-layer-brief.md` с этой папкой.
 2. `automontage layer check --project-dir projects/<папка> --layer motion-vNN` – после каждой
    правки плана, за секунды: ритм, safe-zone, спикер в хуке, звуки, сток, чужое видео. Сток под
-   вставку – `automontage layer stock` (без `PEXELS_API_KEY` клип кладут вручную).
+   вставку – `automontage layer stock` (без `PEXELS_API_KEY` или `PIXABAY_API_KEY` клип кладут вручную).
 3. `automontage layer render` – ждёт слот машинной очереди, проверяет длину слоя и голос в его звуке.
    Тяжёлые команды (`layer render`, `layer import`, preview, final и master) запускай в фоне;
    при ожидании смотри `automontage queue`. `layer render --no-wait` сразу отказывает, если

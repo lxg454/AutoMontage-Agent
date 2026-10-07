@@ -55,7 +55,9 @@ License 1.1; the complete license text for each font is tracked beside the binar
   files are not redistributed by the public fixture set.
 - Sound effects for motion layers are never tracked: `automontage layer new` copies them from the local
   `AUTOMONTAGE_SFX_DIR` library (default `projects/.library/sfx`) into the ignored project folder and
-  records license and SHA-256 in the layer's `public/SOURCE.md`. Pexels clips from
-  `automontage layer stock` stay in the same ignored folder with their source row.
+  records license and SHA-256 in the layer's `public/SOURCE.md`. Pexels and Pixabay clips from
+  `automontage layer stock` (`public/stock/pexels-<id>.mp4`, `public/stock/pixabay-<id>.mp4`)
+  stay in the same ignored folder with their source row (Pexels License or Pixabay Content
+  License and author).
 - Regenerated binary output may differ byte-for-byte across ffmpeg, Chromium, or Remotion
   versions; its visual content and inputs remain reproducible from the listed command.

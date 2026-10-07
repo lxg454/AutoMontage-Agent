@@ -1,7 +1,13 @@
 'use strict';
 const { Readable } = require('node:stream');
 const { createCandidateStore } = require('../broll/candidates');
-const { normalizeSearch, MEDIA_HOSTS } = require('../broll/pexels');
+const { normalizeSearch } = require('../broll/search-common');
+const { providerInfo } = require('../broll/providers');
+// Хосты медиа – только того провайдера, который нашёл кандидата.
+const mediaHosts = (candidate) => {
+  const info = providerInfo(candidate.provider);
+  return [...new Set([...info.imageHosts, ...info.videoHosts])];
+};
 const { requestRemote, LIMITS } = require('../broll/remote');
 const { validateProvenance } = require('../broll/provenance');
 const { runMediaProcess } = require('./media-process');
@@ -66,6 +72,7 @@ const PUBLIC_ERRORS = new Set([
   'BROLL_REMOTE_TIMEOUT',
   'BROLL_REMOTE_REJECTED',
   'BROLL_PROVIDER_FAILED',
+  'BROLL_RATE_LIMITED',
   'BROLL_KEY_MISSING',
   'BROLL_CONFIG_INVALID',
   'BROLL_PROVIDER_UNSUPPORTED',
@@ -327,7 +334,7 @@ function createBrollDiscovery({
           current(entry, candidateId);
           const response = await download({
             url,
-            allowedHosts: MEDIA_HOSTS,
+            allowedHosts: mediaHosts(candidate),
             maxBytes: LIMITS[kind],
             timeoutMs: 20000,
             signal,
@@ -390,7 +397,7 @@ function createBrollDiscovery({
           async (signal) => {
             const response = await download({
               url: candidate.downloadUrl,
-              allowedHosts: MEDIA_HOSTS,
+              allowedHosts: mediaHosts(candidate),
               maxBytes: LIMITS[candidate.mediaKind],
               timeoutMs: 60000,
               signal,
@@ -421,7 +428,7 @@ function createBrollDiscovery({
               headers: {
                 'content-length': String(response.bytes.length),
                 'content-type': candidate.rendition.mimeType,
-                'x-automontage-filename': `pexels-${candidate.providerAssetId}.${extension}`,
+                'x-automontage-filename': `${candidate.provider}-${candidate.providerAssetId}.${extension}`,
               },
             });
             current(entry, body.candidateId);

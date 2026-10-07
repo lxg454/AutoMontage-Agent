@@ -207,3 +207,28 @@ test('redirect revalidates DNS rather than reusing first host address', async (t
   );
   assert.equal(lookups, 2);
 });
+test('429 from a provider is a distinct rate-limit code without the response body', async (t) => {
+  const requestImpl = await mock(t, (req, res) => {
+    res.writeHead(429, { 'content-type': 'text/plain', 'retry-after': '3' });
+    res.end('secret rate limit');
+  });
+  await assert.rejects(requestRemote({ ...base, requestImpl }),
+    (e) => e.code === 'BROLL_REMOTE_RATE_LIMITED' && !e.message.includes('secret'));
+});
+test('Authorization header is still sent only to api.pexels.com, never to Pixabay', async (t) => {
+  let seen;
+  const requestImpl = await mock(t, (req, res) => {
+    seen = req.headers.authorization;
+    res.writeHead(200, { 'content-type': 'application/json', 'content-length': '2' });
+    res.end('{}');
+  });
+  await requestRemote({ ...base, url: 'https://pixabay.com/api/?q=cat', allowedHosts: ['pixabay.com'],
+    expectedMimeTypes: ['application/json'], headers: { Authorization: 'secret' }, requestImpl });
+  assert.equal(seen, undefined);
+});
+test('429 carries Retry-After seconds only when it is a small integer', async (t) => {
+  for (const [header, expected] of [['3', 3], ['600', null], ['Wed, 21 Oct 2015 07:28:00 GMT', null]]) {
+    const requestImpl = await mock(t, (req, res) => { res.writeHead(429, { 'retry-after': header }); res.end(); });
+    await assert.rejects(requestRemote({ ...base, requestImpl }), (e) => e.code === 'BROLL_REMOTE_RATE_LIMITED' && e.retryAfterSec === expected);
+  }
+});

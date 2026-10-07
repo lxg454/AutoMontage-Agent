@@ -3,11 +3,13 @@
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { loadBrollConfig } = require('./config');
-const { createPexelsProvider, IMAGE_HOSTS, VIDEO_HOSTS } = require('./pexels');
+const { createSearchProvider, providerInfo } = require('./providers');
 const { requestRemote, LIMITS, failure } = require('./remote');
 async function runLive(args, {
   loadBrollConfig: loadConfig = loadBrollConfig,
-  createPexelsProvider: createProvider = createPexelsProvider,
+  // createPexelsProvider – прежнее имя подмены в тестах; createProvider – для любого провайдера.
+  createPexelsProvider,
+  createProvider = createPexelsProvider || createSearchProvider,
   requestRemote: request = requestRemote,
   importReviewMedia: importMedia = require('../review/media-import').importReviewMedia,
   log = console.log,
@@ -17,7 +19,7 @@ async function runLive(args, {
     config = loadConfig({ root: path.resolve(__dirname, '../..') });
   } catch (error) {
     if (error.code === 'BROLL_KEY_MISSING') {
-      log('SKIPPED: PEXELS_API_KEY is not configured');
+      log('SKIPPED: PEXELS_API_KEY or PIXABAY_API_KEY is not configured');
       return;
     }
     throw error;
@@ -51,7 +53,9 @@ async function runLive(args, {
     } catch { throw failure('BROLL_LIVE_PROJECT_INVALID'); }
   }
   const provider = createProvider(config),
+    { imageHosts: IMAGE_HOSTS, videoHosts: VIDEO_HOSTS } = providerInfo(config.provider),
     found = [];
+  log(`provider: ${config.provider}`);
   for (const mediaKind of ['image', 'video']) {
     const query = options['--query'] || 'nature';
     const { candidates } = await provider.search({
@@ -106,7 +110,7 @@ async function runLive(args, {
   const { runMediaProcess } = require('../review/media-process');
   const extension = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp','video/mp4':'mp4'}[candidate.rendition.mimeType];
   if (!extension || response.contentType !== candidate.rendition.mimeType || !Buffer.isBuffer(response.bytes) || !response.bytes.length || response.bytes.length > LIMITS[candidate.mediaKind]) throw failure('BROLL_LIVE_FAILED');
-  const filename = `pexels-${candidate.providerAssetId}.${extension}`;
+  const filename = `${candidate.provider}-${candidate.providerAssetId}.${extension}`;
   await importMedia({
     request: Readable.from([response.bytes]),
     projectDir,

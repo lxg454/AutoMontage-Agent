@@ -50,7 +50,7 @@ test('without PEXELS_API_KEY the command explains that stock search is optional'
   const before = fs.readFileSync(path.join(layerDir, 'public', 'SOURCE.md'), 'utf8');
   await assert.rejects(stock.run({ 'project-dir': projectDir, layer: 'motion-v01', query: 'people laptop', insert: 'stock-1' }, { env: {}, root: null }),
     (error) => {
-      assert.match(error.message, /PEXELS_API_KEY не задан/);
+      assert.match(error.message, /PIXABAY_API_KEY или PEXELS_API_KEY\) не задан/);
       assert.match(error.message, /необязател/);
       // Как обойтись без ключа: свой клип в public/stock/ и строка источника в SOURCE.md, длина – по вставке.
       assert.match(error.message, /public\/stock\//);
@@ -312,4 +312,47 @@ test('control and format characters of the query never reach SOURCE.md', { skip:
   // Таб – граница слов, а не мусор: он становится пробелом, а не пропадает («за ноутбуком»,
   // а не слитное «заноутбуком»).
   assert.match(row, /«люди за ноутбуком \\\| ok»/);
+});
+
+// Pixabay: тот же путь слоя, только хосты, имя файла и лицензия свои; ключ PIXABAY_API_KEY не утекает.
+const pixabayCandidate = { ...candidate, provider: 'pixabay', providerAssetId: '212404',
+  sourcePage: 'https://pixabay.com/videos/id-212404/', author: { name: 'Автор', url: 'https://pixabay.com/users/21058920/' },
+  license: { name: 'Pixabay Content License', url: 'https://pixabay.com/service/license-summary/' },
+  rendition: { id: 'small', width: 1080, height: 1920, mimeType: 'video/mp4' },
+  downloadUrl: 'https://cdn.pixabay.com/video/2024/05/18/212404_small.mp4' };
+const PIXABAY_KEY = 'pixabay-not-a-real-key';
+
+test('with only PIXABAY_API_KEY a Pixabay clip lands as pixabay-<id>.mp4 with its license', { skip: !hasFfmpeg }, async (t) => {
+  const { runStock, layerDir, sourceMd, downloaded } = await scaffold(t);
+  let providerConfig;
+  const extra = { env: { PIXABAY_API_KEY: PIXABAY_KEY },
+    createProvider: (config) => { providerConfig = config; return { search: async () => ({ candidates: [pixabayCandidate] }) }; },
+    request: async (req) => {
+      assert.ok(req.allowedHosts.includes('cdn.pixabay.com'));
+      assert.ok(!req.allowedHosts.includes('videos.pexels.com'));
+      assert.ok(!req.url.includes(PIXABAY_KEY), 'ключ не уходит на CDN');
+      return { bytes: fs.readFileSync(downloaded), contentType: 'video/mp4' };
+    } };
+  assert.equal(await runStock({ sec: '1' }, extra), 0);
+  assert.equal(providerConfig.apiKey, PIXABAY_KEY);
+  assert.deepEqual(providerConfig.videoHosts, ['cdn.pixabay.com']);
+  assert.ok(fs.existsSync(path.join(layerDir, 'public', 'stock', 'pixabay-212404.mp4')));
+  assert.match(sourceMd(), /`stock\/pixabay-212404\.mp4` \| \[Pixabay Content License\]\(https:\/\/pixabay\.com\/service\/license-summary\/\)/);
+  assert.ok(!sourceMd().includes(PIXABAY_KEY));
+});
+
+test('BAD CASE: a Pexels candidate is refused while Pixabay is the configured provider', { skip: !hasFfmpeg }, async (t) => {
+  const { runStock, layerDir } = await scaffold(t);
+  const extra = { env: { PIXABAY_API_KEY: PIXABAY_KEY }, createProvider: () => ({ search: async () => ({ candidates: [candidate] }) }) };
+  await assert.rejects(runStock({ sec: '1' }, extra), /у найденных роликов Pixabay нет прямой ссылки на mp4/);
+  assert.deepEqual(fs.readdirSync(path.join(layerDir, 'public', 'stock')), ['placeholder.mp4']);
+});
+
+test('SECURITY: PIXABAY_API_KEY never reaches an error message; rate limit is explained', { skip: !hasFfmpeg }, async (t) => {
+  const { runStock } = await scaffold(t);
+  const env = { PIXABAY_API_KEY: PIXABAY_KEY };
+  await assert.rejects(runStock({}, { env, createProvider: () => ({ search: async () => { throw new Error(`boom ${PIXABAY_KEY}`); } }) }),
+    (error) => { assert.ok(!error.message.includes(PIXABAY_KEY), error.message); return true; });
+  await assert.rejects(runStock({}, { env, createProvider: () => ({ search: async () => { throw failure('BROLL_RATE_LIMITED'); } }) }),
+    /Pixabay просит подождать/);
 });

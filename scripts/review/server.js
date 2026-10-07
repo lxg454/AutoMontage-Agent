@@ -48,7 +48,7 @@ const { auditBriefTiming } = require('./timing-audit');
 const { isDeepStrictEqual } = require('node:util');
 const { createPreviewJobs } = require('./preview-jobs');
 const { createBrollDiscovery } = require('./broll-discovery');
-const { createPexelsProvider } = require('../broll/pexels');
+const { createSearchProvider } = require('../broll/providers');
 const { loadBrollConfig } = require('../broll/config');
 const { browserProvenance } = require('../broll/provenance');
 const { ensureWaveformPreview } = require('./waveform');
@@ -1700,7 +1700,7 @@ async function startReviewServer({
   };
   runtime.previewJobs = createPreviewJobs({root:resolvedRoot,projectDir:resolvedProjectDir,getBase:()=>loadReviewBase({projectDir:resolvedProjectDir}),...(previewSpawnImpl ? { spawnImpl: previewSpawnImpl } : {})});
   runtime.discovery = createBrollDiscovery({
-    provider: brollProvider || {search(input) {const config=loadBrollConfig({root:resolvedRoot});return createPexelsProvider(config).search(input);}},
+    provider: brollProvider || {search(input) {const config=loadBrollConfig({root:resolvedRoot});return createSearchProvider(config).search(input);}},
     ...(brollDownload?{download:brollDownload}:{}), ...(brollStore?{store:brollStore}:{}),
     getSnapshot() {
       const current=loadReviewBase({projectDir:resolvedProjectDir});
