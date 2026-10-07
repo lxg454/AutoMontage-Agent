@@ -39,8 +39,34 @@ test('only the explicit layer environment flag enables the override', () => {
   assert.equal(shouldOverride({ AUTOMONTAGE_LAYER_LIMITED_RANGE: '0' }), false);
 });
 
-test('Remotion config registers the ffmpeg override only for the explicit layer flag', () => {
-  // Config is evaluated by Remotion CLI; loading it directly does not reproduce that context.
-  const config = fs.readFileSync(path.join(__dirname, '..', 'remotion.config.js'), 'utf8');
-  assert.match(config, /if\s*\(shouldOverride\(process\.env\)\)\s*\{?\s*Config\.overrideFfmpegCommand\(limitedRangeOverride\)/u);
+// Конфиг исполняет загрузчик Remotion CLI (esbuild + eval), поэтому он и проверяется: какой override
+// ffmpeg остаётся зарегистрированным после загрузки при разных переменных окружения.
+async function loadRemotionConfig(env) {
+  const cliPackage = path.dirname(require.resolve('@remotion/cli/package.json'));
+  const { loadConfigFile } = require(path.join(cliPackage, 'dist/load-config.js'));
+  const overrides = require(path.join(cliPackage, 'dist/config/ffmpeg-override.js'));
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  overrides.resetFfmpegOverrideFunction();
+  try {
+    Object.assign(process.env, env);
+    for (const [key, value] of Object.entries(env)) if (value === undefined) delete process.env[key];
+    await loadConfigFile(path.join(__dirname, '..'), 'remotion.config.js', true);
+    return overrides.getFfmpegOverrideFunction();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    overrides.resetFfmpegOverrideFunction();
+  }
+}
+
+test('Remotion config registers the ffmpeg override only for the explicit layer flag', async () => {
+  const off = { AUTOMONTAGE_GPU: 'off' };
+  const plain = await loadRemotionConfig({ ...off, AUTOMONTAGE_LAYER_LIMITED_RANGE: undefined });
+  assert.deepEqual(plain({ type: 'stitcher', args: [...STITCHER_ARGS] }), STITCHER_ARGS);
+  const layer = await loadRemotionConfig({ ...off, AUTOMONTAGE_LAYER_LIMITED_RANGE: '1' });
+  assert.deepEqual(layer({ type: 'stitcher', args: [...STITCHER_ARGS] }),
+    [...STITCHER_ARGS.slice(0, -2), ...LIMITED_ARGS, '-y', 'out.mp4'],
+    'с AUTOMONTAGE_GPU=off – прежний limited range без подмены кодера');
 });

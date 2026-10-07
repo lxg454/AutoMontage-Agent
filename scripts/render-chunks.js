@@ -10,6 +10,7 @@ const { randomUUID } = require('node:crypto');
 const { finiteNumber, optionValue } = require('./build-options');
 const { resolveRemotionCommand } = require('./env');
 const { hostPath, runTool } = require('./process');
+const { h264EncoderArgs, runH264 } = require('./gpu');
 const {
   canonicalizeRenderProps,
   collectReferencedPublicAssets,
@@ -83,7 +84,7 @@ function remotionChunkCommand(resolvedRemotion, {
   };
 }
 
-function concatChunksCommand(parts, output) {
+function concatChunksCommand(parts, output, { nvenc = false } = {}) {
   if (!Array.isArray(parts) || parts.length === 0) throw new Error('нет chunk-файлов для concat');
   const args = ['-y'];
   for (const part of parts) args.push('-i', hostPath(part));
@@ -91,9 +92,7 @@ function concatChunksCommand(parts, output) {
   args.push(
     '-filter_complex', `${filterInputs}concat=n=${parts.length}:v=1:a=0[vout]`,
     '-map', '[vout]',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '18',
+    ...h264EncoderArgs({ crf: 18, preset: 'veryfast', nvenc, pixFmt: false }),
     '-pix_fmt', 'yuv420p',
     hostPath(output),
   );
@@ -240,8 +239,8 @@ function main(args = process.argv.slice(2), root = ROOT) {
   console.log(`порций: ${parts.length} (переиспользовано ${reused})`);
 
   const glued = path.join(directory, 'video.mp4');
-  const concat = concatChunksCommand(parts, glued);
-  runTool(concat.command, concat.args, { cwd: ROOT, stage: 'chunk concat' });
+  runH264((nvenc) => concatChunksCommand(parts, glued, { nvenc }),
+    { run: runTool, stage: 'chunk concat', options: { cwd: ROOT } });
   if (options.audio) {
     const mux = muxAudioCommand(glued, options.audio, options.output);
     runTool(mux.command, mux.args, { cwd: ROOT, stage: 'chunk audio mux' });
