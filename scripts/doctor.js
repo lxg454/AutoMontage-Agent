@@ -83,7 +83,26 @@ if (fp) ok(fp); else fail('ffprobe не найден (обычно ставит�
 try {
   const py = python();
   const r = spawnSync(py, ['-c', 'import faster_whisper; print(faster_whisper.__version__)'], { encoding: 'utf8' });
-  if (r.status === 0) ok(`faster-whisper ${(r.stdout || '').trim()} (транскрипция речи)`);
+  if (r.status === 0) {
+    ok(`faster-whisper ${(r.stdout || '').trim()} (транскрипция речи)`);
+    // Та же проверка, что делает transcribe.py: видит ли CTranslate2 видеокарту и есть ли cuBLAS/cuDNN.
+    const gpuCheck = spawnSync(py, ['-c', [
+      'import glob, os, ctranslate2',
+      'n = ctranslate2.get_cuda_device_count()',
+      'try:',
+      '    import nvidia',
+      '    libs = any(glob.glob(os.path.join(p, "cublas", "*", "*cublas*")) for p in nvidia.__path__)',
+      'except ImportError:',
+      '    libs = False',
+      'print(n, int(bool(libs)))',
+    ].join('\n')], { encoding: 'utf8' });
+    const [devices, libs] = (gpuCheck.stdout || '').trim().split(' ').map(Number);
+    let whisperOff = false;
+    try { whisperOff = require('./gpu').gpuMode() === 'off'; } catch (_) { /* неверное значение покажет строка про видеокарту ниже */ }
+    if (whisperOff || !(devices > 0)) ok('Whisper распознаёт на процессоре');
+    else if (libs) ok('Whisper распознаёт на видеокарте (CUDA float16)');
+    else warn('Видеокарта для Whisper есть, но нет cuBLAS/cuDNN: `pip install -r requirements-gpu.txt` ускорит распознавание речи примерно в 5–10 раз');
+  }
   else warn('faster-whisper не установлен: `pip install -r requirements.txt`. Нужен для распознавания речи (для монтажа по готовому --scenario с --no-transcribe не требуется)');
 } catch (_) { /* python уже отмечен как FAIL выше */ }
 

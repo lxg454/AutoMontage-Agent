@@ -312,6 +312,10 @@ Chromium нужен только для browser tests и пересборки PN
 не зависят от машины; ветку NVENC покрывает `tests/gpu.test.js` явной передачей `nvenc`. Живая
 проверка на машине с NVIDIA: один и тот же рендер с `AUTOMONTAGE_GPU=auto` и `off`, сравнить время,
 `ffprobe` (`pix_fmt=yuv420p`, у слоя `color_range=tv`) и PSNR между ними (среднее ≥ 45 дБ).
+Whisper: `tests/transcribe-device.test.js` подменяет `faster_whisper` и `ctranslate2` через
+`PYTHONPATH` и проверяет CUDA, откат на CPU после сбоя внутри разбора сегментов и `off`. Живая
+проверка: `AUTOMONTAGE_GPU=auto` и `off python scripts/transcribe.py <минута речи> <out.json>` –
+строка `device=cuda/float16`, слова в обоих JSON совпадают.
 
 ## 3. Воспроизводимый демо-рендер
 

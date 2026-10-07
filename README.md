@@ -100,6 +100,7 @@ git clone https://github.com/mcdenil-skills/AutoMontage-Agent.git
 cd AutoMontage-Agent
 npm ci                 # точные Node-зависимости из package-lock.json
 pip install -r requirements.txt   # Python: faster-whisper, opencv, numpy
+pip install -r requirements-gpu.txt   # необязательно: Whisper на видеокарте NVIDIA
 npm install -g .       # ставит глобальную команду automontage
 ```
 
@@ -600,12 +601,17 @@ automontage queue   # занято/свободно, число слотов; з
 
 - Remotion на Windows рисует кадры через GPU Chromium (`--gl=angle`);
 - H.264 кодируется аппаратно (NVENC) в Remotion, `master`, черновой нарезке, нормализации слоя,
-  финише и склейке частей; качество не ниже, чем у `libx264` с прежними настройками.
+  финише и склейке частей; качество не ниже, чем у `libx264` с прежними настройками;
+- распознавание речи (Whisper) идёт на CUDA, если поставлены библиотеки NVIDIA:
+  `pip install -r requirements-gpu.txt` (около 1 ГБ, один раз). Минута речи – 48 с → 10 с вместе с
+  загрузкой модели, текст и тайминги слов те же.
 
 Перед первым кодированием движок делает пробу на один кадр; если NVENC нет или шаг на нём упал,
 тот же шаг повторяется на процессоре (`libx264`). Замер на слое 1080×1920, 25 fps (RTX 5070,
 i7-8700): Remotion 300 кадров – 44 с → 26 с, `master` 55 с видео – 18 с → 8 с, перекодирование слоя –
-в 6 раз быстрее.
+в 6 раз быстрее. Whisper при любой ошибке CUDA (нет библиотек, мало памяти) распознаёт тот же файл
+на процессоре. Добавлять потоков Remotion (`--concurrency` выше 50 %) смысла нет: 75 % и 100 % дали
+те же 26 с, свободные ядра остаются пульту и браузеру.
 `automontage doctor` показывает, что найдено. Выключить: `AUTOMONTAGE_GPU=off`.
 
 ### Пульт роликов: все ролики в одном окне

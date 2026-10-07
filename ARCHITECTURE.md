@@ -1325,7 +1325,7 @@ CLI всегда передаёт единицы выбранного offer.
 | `THEMES_EXT` | опционально | корневая папка внешних тем `<id>/theme.json` |
 | `LEAD_MAGNET_BRAND` | опционально | приватная папка бренд-пака лид-магнитов; без неё ищется `lead-magnet/` рядом с `THEMES_EXT`, затем нейтральная тема |
 | `AUTOMONTAGE_FFMPEG_DIR` | опционально | каталог отдельной `ffmpeg` + `ffprobe`; CLI ставит его первым в дочерний `PATH` |
-| `AUTOMONTAGE_GPU` | опционально | `auto` (по умолчанию) – `--gl=angle` для Chromium Remotion на Windows и NVENC вместо `libx264` после пробы (`scripts/gpu.js`); `off` – только CPU |
+| `AUTOMONTAGE_GPU` | опционально | `auto` (по умолчанию) – `--gl=angle` для Chromium Remotion на Windows и NVENC вместо `libx264` после пробы (`scripts/gpu.js`), Whisper на CUDA float16 с откатом на CPU int8 (`scripts/transcribe.py`); `off` – только CPU |
 | `AUTOMONTAGE_SFX_DIR` | опционально | папка библиотеки звуков для `layer new`; по умолчанию `projects/.library/sfx`. Заданная переменная с несуществующей папкой – ошибка; без переменной и без папки по умолчанию слой собирается без звуков |
 
 Dynamic, канонический lesson через текущую подписку Claude Code/Codex, Review, preview, render,

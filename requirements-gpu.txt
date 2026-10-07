@@ -1,0 +1,5 @@
+# Необязательно: распознавание речи на видеокарте NVIDIA (Windows и Linux).
+# pip install -r requirements-gpu.txt   (~1 ГБ; драйвер NVIDIA должен быть установлен)
+# Без этих пакетов transcribe.py распознаёт на процессоре, как раньше.
+nvidia-cublas-cu12      # cuBLAS для CTranslate2 (faster-whisper)
+nvidia-cudnn-cu12==9.*  # cuDNN 9, с ним собран CTranslate2 4.x
