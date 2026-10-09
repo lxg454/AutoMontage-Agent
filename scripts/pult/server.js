@@ -389,6 +389,10 @@ async function startPultServer({
       serveFile(request, response, snapshot);
       return;
     }
+    if (url.pathname === '/media/lm-file') {
+      leadMagnet.handleDownload(url, request, response);
+      return;
+    }
 
     const entry = findEntry(url.searchParams.get('key'));
     if (!entry) {

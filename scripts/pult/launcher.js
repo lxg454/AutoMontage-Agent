@@ -45,9 +45,11 @@ function revealCommand(targetPath, { platform = process.platform, isDirectory = 
   return { command: 'xdg-open', args: [isDirectory ? targetPath : path.posix.dirname(targetPath)] };
 }
 
-function launchDetached(command, args, { spawnImpl = spawn } = {}) {
+// windowsHide прячет консоль служебных процессов, но окно, которое должен увидеть человек,
+// с ним открывается скрытым – Проводник с этим флагом невидим.
+function launchDetached(command, args, { spawnImpl = spawn, windowsHide = true } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawnImpl(command, args, { detached: true, stdio: 'ignore', shell: false, windowsHide: true });
+    const child = spawnImpl(command, args, { detached: true, stdio: 'ignore', shell: false, windowsHide });
     child.once('error', reject);
     child.once('spawn', () => {
       child.unref();
@@ -69,7 +71,7 @@ async function revealInFileManager(targetPath, options = {}) {
     isDirectory = false;
   }
   const { command, args } = revealCommand(targetPath, { ...options, isDirectory });
-  await launchDetached(command, args, options);
+  await launchDetached(command, args, { ...options, windowsHide: false });
 }
 
 module.exports = { appWindowCommand, launchDetached, openPultWindow, revealCommand, revealInFileManager };

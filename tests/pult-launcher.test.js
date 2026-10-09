@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 
-const { appWindowCommand, openPultWindow, revealCommand } = require('../scripts/pult/launcher');
+const { appWindowCommand, openPultWindow, revealCommand, revealInFileManager } = require('../scripts/pult/launcher');
 
 const URL_ = 'http://127.0.0.1:4100/#token=abc';
 const only = (paths) => (candidate) => paths.includes(candidate);
@@ -64,4 +64,21 @@ test('launches are detached and never use a shell', async () => {
   assert.equal(calls[0].options.shell, false);
   assert.equal(calls[0].options.detached, true);
   assert.equal(calls[0].unref, true);
+});
+
+// Регрессия: с windowsHide: true Windows открывал Проводник скрытым окном – «Показать в
+// папке» будто не работала, а невидимые окна копились с каждым нажатием.
+test('«Показать в папке» opens a visible file manager window', async () => {
+  const calls = [];
+  const spawnImpl = (command, args, options) => {
+    calls.push({ command, args, options });
+    const child = new EventEmitter();
+    child.unref = () => {};
+    setImmediate(() => child.emit('spawn'));
+    return child;
+  };
+  await revealInFileManager('C:\p\page.html', { platform: 'win32', spawnImpl });
+  assert.deepEqual([calls[0].command, calls[0].args], ['explorer.exe', ['/select,', 'C:\p\page.html']]);
+  assert.equal(calls[0].options.windowsHide, false);
+  assert.equal(calls[0].options.shell, false);
 });

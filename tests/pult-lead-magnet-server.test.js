@@ -382,6 +382,40 @@ test('«Показать в папке» opens only whitelisted files of the sho
   assert.equal((await post(session, '/api/lead-magnet/reveal', { id: '2026.01.01_net', file: 'page.pdf' })).status, 404);
 });
 
+test('«Скачать» gives whitelisted files of the shown revision as attachments, only with the pult token', async (t) => {
+  const { id, dir, session } = await publishedMagnet(t);
+  const url = (file, magnet = id) => `/media/lm-file?id=${encodeURIComponent(magnet)}&file=${encodeURIComponent(file)}`;
+  const page = await get(session, url('page.html'));
+  assert.equal(page.status, 200);
+  assert.deepEqual(page.body, fs.readFileSync(path.join(dir, 'page.html')));
+  assert.equal(page.headers['content-disposition'], `attachment; filename="${id}.html"`);
+  assert.match(page.headers['content-security-policy'], /sandbox/);
+  assert.equal(page.headers['x-content-type-options'], 'nosniff');
+  const pdf = await get(session, url('page.pdf'));
+  assert.deepEqual([pdf.status, pdf.headers['content-type'], pdf.headers['content-disposition']],
+    [200, 'application/pdf', `attachment; filename="${id}.pdf"`]);
+  const dm = await get(session, url('texts/dm.txt'));
+  assert.deepEqual([dm.status, dm.headers['content-disposition']], [200, `attachment; filename="${id}-dm.txt"`]);
+  const byQuery = await request(session, `${url('page.html')}&token=${session.token}`, { token: null });
+  assert.equal(byQuery.status, 200);
+  assert.equal((await request(session, url('page.html'), { token: null })).status, 401);
+  for (const bad of ['../lead-magnet.json', 'content.md', 'facts.json', 'qa/check.json']) {
+    assert.equal((await get(session, url(bad))).status, 404, bad);
+  }
+  assert.equal((await get(session, url('page.html', '2026.01.01_net'))).status, 404);
+  assert.equal((await get(session, url('page.html', '../x'))).status, 404);
+  assert.equal((await request(session, url('page.html'), { method: 'POST', origin: session.origin })).status, 405);
+  fs.unlinkSync(path.join(dir, 'page.pdf'));
+  assert.equal((await get(session, url('page.pdf'))).status, 404);
+  try {
+    fs.symlinkSync(path.join(dir, 'content.md'), path.join(dir, 'page.pdf'));
+  } catch (error) {
+    if (error.code === 'EPERM') return; // Windows без режима разработчика не создаёт ссылки.
+    throw error;
+  }
+  assert.equal((await get(session, url('page.pdf'))).status, 404);
+});
+
 test('approval rejects changed page bytes, a newer revision and a newly red check', async (t) => {
   for (const change of ['page', 'revision', 'check']) {
     const { projectsDir, id, dir, session, state } = await publishedMagnet(t);

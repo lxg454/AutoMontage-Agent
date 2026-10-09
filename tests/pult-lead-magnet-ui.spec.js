@@ -525,6 +525,10 @@ test('approval needs the checkbox and then shows the files', async ({ page }) =>
   const pdf = page.locator('[data-lm-files] li', { hasText: 'PDF' });
   await pdf.locator('button').click();
   await expect.poll(() => calls.reveal.at(-1) || '').toMatch(/v01[\\/]page\.pdf$/);
+  const html = page.locator('[data-lm-files] li', { hasText: 'Страница (HTML)' });
+  const [download] = await Promise.all([page.waitForEvent('download'), html.locator('a', { hasText: 'Скачать' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^\d{4}\.\d{2}\.\d{2}_[a-z0-9-]+\.html$/);
+  expect(fs.readFileSync(await download.path(), 'utf8')).toContain('Сайт без кода');
 });
 
 test('a new lead revision appears while the waiting card summary stays the same', async ({ page }) => {

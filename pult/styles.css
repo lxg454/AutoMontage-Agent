@@ -106,6 +106,8 @@ button, input, textarea { font: inherit; color: inherit; }
 .empty, .hint { color: hsl(var(--muted-foreground)); }
 .plain-list { list-style: none; padding: 0; }
 .plain-list__row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid hsl(var(--border)); }
+.plain-list__actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; }
+a.link-button { text-decoration: none; }
 
 .detail__title { margin: 0.75rem 0; }
 .variant-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }

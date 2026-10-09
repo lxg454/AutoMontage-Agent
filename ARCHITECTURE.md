@@ -1274,6 +1274,7 @@ CLI всегда передаёт единицы выбранного offer.
 | `POST /api/lead-magnet/reveal` | Показать допустимый файл ревизии в папке |
 | `GET /lm/page?id=&rev=&ticket=` | Живая страница в изолированном iframe, без главного ключа пульта |
 | `GET /media/lm-snapshot?id=&comment=&token=` | Снимок места правки |
+| `GET /media/lm-file?id=&file=&token=` | «Скачать»: файл показанной ревизии из списка «Файлы» вложением |
 
 `revisionReadiness` в `scripts/lead-magnet/readiness.js` – единое правило готовности для
 сводки пульта и `approveLeadMagnet`: сверяет байты страницы, факты, отпечаток исходных

@@ -730,8 +730,13 @@ function lmFilesPanel(magnet) {
   const list = el('ul', 'plain-list');
   for (const file of magnet.files.list) {
     const row = el('li', 'plain-list__row');
-    row.append(el('span', '', LM_FILE_LABELS[file] || file),
+    const download = el('a', 'link-button', 'Скачать');
+    download.href = mediaUrl(`/media/lm-file?id=${encodeURIComponent(magnet.id)}&file=${encodeURIComponent(file)}`);
+    download.download = '';
+    const actions = el('span', 'plain-list__actions');
+    actions.append(download,
       button('Показать в папке', () => api('/api/lead-magnet/reveal', { method: 'POST', body: { id: magnet.id, file } }), 'link-button'));
+    row.append(el('span', '', LM_FILE_LABELS[file] || file), actions);
     list.append(row);
   }
   box.append(list);

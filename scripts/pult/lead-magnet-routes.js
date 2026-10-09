@@ -31,7 +31,8 @@ const DECISION_KEYS = {
   'funnel-check': ['key', 'type', 'leadMagnetId'],
 };
 const REVEAL_FILES = ['page.html', 'page.pdf', ...Object.values(TEXT_FILES)];
-const MAX_REFERENCE = Math.max(...Object.values(REFERENCE_LIMITS));
+const DOWNLOAD_TYPES = { '.html': 'text/html; charset=utf-8', '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8' };
+const MAX_REFERENCE =Math.max(...Object.values(REFERENCE_LIMITS));
 
 const bad = () => new PultRequestError(400, 'INVALID_REQUEST', 'Неверный запрос');
 const notFound = () => new PultRequestError(404, 'NOT_FOUND', 'Не найдено');
@@ -287,6 +288,35 @@ function createLeadMagnetRoutes({
     send(response, 200, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP }, head);
   }
 
+  // «Скачать»: файл из того же списка, что «Показать в папке», вложением. Страница не
+  // открывается в пульте – песочница в CSP на случай, если браузер её всё же покажет.
+  function handleDownload(url, request, response) {
+    const head = request.method === 'HEAD';
+    const id = url.searchParams.get('id');
+    const file = url.searchParams.get('file');
+    let bytes = null;
+    try {
+      if (!REVEAL_FILES.includes(file)) throw notFound();
+      const passport = passportOr404(id);
+      const { revision, list } = filesView(passport);
+      if (revision === null || !list.includes(file)) throw notFound();
+      bytes = readChecked(projectsDir, revisionDir(projectsDir, passport.id, revision), file);
+    } catch (_) {
+      bytes = null;
+    }
+    if (!bytes) {
+      sendError(response, 404, head);
+      return;
+    }
+    const base = path.posix.basename(file);
+    const name = base.startsWith('page.') ? `${id}${path.posix.extname(base)}` : `${id}-${base}`;
+    send(response, 200, bytes, {
+      'Content-Type': DOWNLOAD_TYPES[path.posix.extname(base)],
+      'Content-Disposition': `attachment; filename="${name}"`,
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+    }, head);
+  }
+
   // Путь снимка правки для /media/lm-snapshot или null (тогда 404).
   function snapshotFile(url) {
     const id = url.searchParams.get('id');
@@ -425,7 +455,7 @@ function createLeadMagnetRoutes({
     await handler(url, request, response);
   }
 
-  return { handleApi, handlePage, snapshotFile, POST_ROUTES, internals: { approvalTicket, pageTicket, passportOr404, sign } };
+  return { handleApi, handleDownload, handlePage, snapshotFile, POST_ROUTES, internals: { approvalTicket, pageTicket, passportOr404, sign } };
 }
 
 module.exports = { DECISION_KEYS, REVEAL_FILES, createLeadMagnetRoutes, exactKeys };
