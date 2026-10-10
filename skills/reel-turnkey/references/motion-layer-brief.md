@@ -129,17 +129,17 @@
 ## Как смотреть кадры
 
 Ошибки `scenes.jsx` (опечатка, текст не влезает в `box`, `CAPTION_FONT` не из `FONTS`)
-`layer check` не видит – их покажет только кадр. Снимай не больше ~10 кадров за итерацию: входы и
-выходы карточек, раскрытие вставок, первые 3 с. Команда – из корня движка:
+`layer check` не видит – их покажет только кадр. Снимай все кадры итерации одним запуском
+(входы и выходы карточек, раскрытие вставок, первые 3 с), а не по одному:
 
 ```bash
-npx remotion still projects/<папка>/motion-vNN/src/index.jsx Layer \
-  projects/<папка>/motion-vNN/out/still-120.png --frame=120 \
-  --public-dir projects/<папка>/motion-vNN/public --env-file=config/remotion-public.env
+automontage layer stills --project-dir projects/<папка> --layer motion-vNN --frames 30,120,450
+automontage layer stills --project-dir projects/<папка> --layer motion-vNN --sec 1.2,4,18.5
 ```
 
-`--frame` – номер кадра: секунда × `fps` из `layer.json`. `--env-file` обязателен: без него
-Remotion передаёт браузеру значения из `.env` движка, в том числе ключи.
+Кадры ложатся в `motion-vNN/out/still-<кадр>.png`; `--sec` – секунды × `fps` из `layer.json`.
+Один запуск – одна сборка и один браузер, около 1 с на кадр; не больше 60 кадров за раз.
+Отдельный `npx remotion still` на каждый кадр стоит 10–30 с – не используй его.
 
 ## Порядок работы
 
@@ -148,7 +148,7 @@ Remotion передаёт браузеру значения из `.env` движ
 3. `plan.js`: камера (`autoShots` → правка под смысл), элементы на якорях слов, вставки, звуки,
    `captions.hide`.
 4. `scenes.jsx`: дизайн карточек этого ролика по ДНК дизайна.
-5. `automontage layer check` – до кода 0 без ❌; кадры входов и выходов – `npx remotion still`.
+5. `automontage layer check` – до кода 0 без ❌; кадры входов и выходов – одним `automontage layer stills`.
 6. Сдай оркестратору: `plan.js`, `scenes.jsx`, `public/SOURCE.md`, таблицу сцен в `README.md`
    слоя и отчёт до 20 строк: что сделано, какие исключения и почему, какие ⚠️ остались, что
    сомнительно.

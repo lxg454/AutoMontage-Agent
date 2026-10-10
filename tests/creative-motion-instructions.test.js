@@ -94,8 +94,9 @@ test('motion layer brief and creative motion start with the kit and its gates', 
   for (const rule of [
     'automontage layer new', 'automontage layer check', '70/130/250/420', '2,5 с', 'muted',
     'public/SOURCE.md', 'hook: \'enumeration\'', 'waivers',
-    // Кадр слоя без защищённого env-файла отдал бы браузеру Remotion значения из .env движка.
-    '--env-file=config/remotion-public.env', 'cover: true', 'automontage inbox --accept',
+    // Кадры слоя – одной командой через API Remotion: он не читает .env движка (envVariables пустые,
+    // tests/layer-stills.test.js), а покадровый `npx remotion still` стоил 10–30 с на кадр.
+    'automontage layer stills', 'не используй его', 'cover: true', 'automontage inbox --accept',
   ]) {
     assert.ok(brief.includes(rule), rule);
   }

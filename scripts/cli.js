@@ -257,13 +257,25 @@ function main(argv = process.argv.slice(2)) {
 
   if (argv[0] === 'queue') {
     try {
-      const { heavyQueueConfig, listHeavySlots } = require('./heavy-queue');
+      const { heavyQueueConfig, listHeavySlots, listWaiters, readTimings } = require('./heavy-queue');
       const config = heavyQueueConfig();
+      if (argv[1] === 'stats') {
+        const { formatQueueStats } = require('./queue-stats');
+        console.log(formatQueueStats(readTimings(config), { days: argv[2] === '--all' ? null : 7 }));
+        process.exit(0);
+      }
       const busy = listHeavySlots(config).filter((slot) => slot.busy);
       console.log(`Очередь тяжёлых задач: ${busy.length ? 'занято' : 'свободно'} (слотов: ${config.slots})`);
       for (const slot of busy) {
         console.log(`Слот ${slot.index}: ${slot.label || 'другая тяжёлая задача'}; pid: ${slot.pid ?? 'неизвестен'}; начало: ${slot.acquiredAt || 'неизвестно'}`);
       }
+      for (const slot of listHeavySlots(config, 'light').filter((item) => item.busy)) {
+        console.log(`Лёгкий слот ${slot.index}: ${slot.label || 'лёгкая задача'}; pid: ${slot.pid ?? 'неизвестен'}; начало: ${slot.acquiredAt || 'неизвестно'}`);
+      }
+      const waiting = [...listWaiters(config, 'heavy'), ...listWaiters(config, 'light')];
+      waiting.forEach((waiter, index) => {
+        console.log(`Ждёт ${index + 1}: ${waiter.label || 'задача'}; pid: ${waiter.pid ?? 'неизвестен'}; с ${waiter.since || 'неизвестно'}`);
+      });
       console.log(`Папка очереди: ${config.dir}`);
     } catch (error) {
       console.error(`❌ ${error.message}`);

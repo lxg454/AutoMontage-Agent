@@ -8,7 +8,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const {
   heavyQueueConfig, tryAcquireHeavySlot, acquireHeavySlotSync,
-  acquireHeavySlot, listHeavySlots, HEAVY_QUEUE_BUSY,
+  acquireHeavySlot, listHeavySlots, listWaiters, readTimings, HEAVY_QUEUE_BUSY,
 } = require('../scripts/heavy-queue');
 
 function configFor(t, overrides = {}) {
@@ -213,12 +213,16 @@ test('listing shows live, dead and empty slots without acquiring them', async (t
 
 test('config defaults and explicit overrides are validated', () => {
   assert.deepEqual(heavyQueueConfig({}), {
-    dir: path.join(os.tmpdir(), 'automontage-heavy'), slots: 1,
+    dir: path.join(os.tmpdir(), 'automontage-heavy'), slots: 1, lightSlots: 1,
     waitMs: 3 * 3600_000, pollMs: 5000,
   });
   assert.deepEqual(heavyQueueConfig({
     AUTOMONTAGE_HEAVY_DIR: 'custom-queue', AUTOMONTAGE_HEAVY_SLOTS: '8', AUTOMONTAGE_HEAVY_WAIT_MS: '0',
-  }), { dir: 'custom-queue', slots: 8, waitMs: 0, pollMs: 5000 });
+    AUTOMONTAGE_LIGHT_SLOTS: '0',
+  }), { dir: 'custom-queue', slots: 8, lightSlots: 0, waitMs: 0, pollMs: 5000 });
+  for (const value of ['9', '-1', '1.5', 'x']) {
+    assert.throws(() => heavyQueueConfig({ AUTOMONTAGE_LIGHT_SLOTS: value }), /AUTOMONTAGE_LIGHT_SLOTS/);
+  }
   for (const value of ['9', '0', '-1', '1.5', '1x', '', 'Infinity']) {
     assert.throws(() => heavyQueueConfig({ AUTOMONTAGE_HEAVY_SLOTS: value }), /AUTOMONTAGE_HEAVY_SLOTS/);
   }
@@ -270,6 +274,22 @@ test('queue CLI reports occupied slots with their label, pid and start time', (t
   assert.ok(result.stdout.includes(`Папка очереди: ${config.dir}`));
   assert.equal(listHeavySlots(config)[0].busy, true);
   assert.equal(fs.existsSync(path.join(config.dir, 'slot-1')), false);
+});
+
+test('queue CLI lists waiters in arrival order and a busy light slot', (t) => {
+  const config = configFor(t);
+  hold(t, config, 'final render demo');
+  hold(t, config, 'layer import demo');
+  const dir = path.join(config.dir, 'waiting-heavy');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [order, label] of [['2', 'preview second demo'], ['1', 'preview first demo']]) {
+    fs.writeFileSync(path.join(dir, `${order.padStart(15, '0')}-${String(process.pid).padStart(7, '0')}-${randomUUID()}.json`),
+      JSON.stringify({ label, pid: process.pid, hostname: os.hostname(), since: '2026-10-10T19:00:00.000Z' }));
+  }
+  const result = queueStatus(config);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Лёгкий слот 0: layer import demo/);
+  assert.match(result.stdout, /Ждёт 1: preview first demo[^\n]*\nЖдёт 2: preview second demo/);
 });
 
 async function waitUntil(predicate, message) {
@@ -443,9 +463,139 @@ for (const status of [0, 7]) {
     if (status === 0) {
       assert.ok(next, 'ordinary successful Windows invocation releases normally');
       next.release();
+    } else if (process.platform === 'win32') {
+      // Native Windows can check the recorded supervisor and tool PIDs: both are gone, so the
+      // failed invocation no longer pins the slot (it used to, until an operator cleaned it up).
+      assert.ok(next, 'a failed Windows invocation with no live process releases the slot');
+      next.release();
     } else {
-      assert.equal(next, null, 'unproven Windows completion requires operator verification');
+      assert.equal(next, null, 'a Windows intent read on another platform fails closed');
       assert.equal(listHeavySlots(config)[0].busy, true);
     }
   });
 }
+
+function writeWin32Ticket(config, ticket, { ownerPid = process.pid, ageMs = 0 } = {}) {
+  const slotDir = path.join(config.dir, 'slot-0');
+  fs.mkdirSync(slotDir, { recursive: true });
+  const owner = {
+    version: 1, token: randomUUID(), pid: ownerPid, hostname: os.hostname(),
+    acquiredAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(path.join(slotDir, '.project-mutation.lock'), JSON.stringify(owner));
+  const dir = path.join(slotDir, `.execution-${owner.token}`);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${randomUUID()}-${randomUUID()}.json`);
+  fs.writeFileSync(file, JSON.stringify({ token: owner.token, platform: 'win32', ...ticket }));
+  if (ageMs) {
+    const time = new Date(Date.now() - ageMs);
+    fs.utimesSync(file, time, time);
+  }
+  return owner;
+}
+
+test('Windows intent of a dead orchestrator frees the slot once its supervisor and tool are gone', {
+  skip: process.platform !== 'win32',
+}, async (t) => {
+  const config = configFor(t);
+  const dead = await deadPid();
+  writeWin32Ticket(config, { pgid: dead, toolPid: await deadPid() }, { ownerPid: dead });
+  assert.equal(listHeavySlots(config)[0].busy, false);
+  assert.ok(hold(t, config));
+});
+
+test('Windows intent stays busy while the recorded tool is alive, even if its supervisor died', {
+  skip: process.platform !== 'win32',
+}, async (t) => {
+  const config = configFor(t);
+  const dead = await deadPid();
+  writeWin32Ticket(config, { pgid: dead, toolPid: process.pid }, { ownerPid: dead });
+  assert.equal(listHeavySlots(config)[0].busy, true);
+  assert.equal(tryAcquireHeavySlot({ label: 'preview demo', config }), null);
+});
+
+test('pending Windows intent is busy during its launch grace and free after it', {
+  skip: process.platform !== 'win32',
+}, async (t) => {
+  const fresh = configFor(t);
+  const dead = await deadPid();
+  writeWin32Ticket(fresh, {}, { ownerPid: dead });
+  assert.equal(listHeavySlots(fresh)[0].busy, true, 'a supervisor may still be starting');
+  const old = configFor(t);
+  writeWin32Ticket(old, {}, { ownerPid: dead, ageMs: 60_000 });
+  assert.equal(listHeavySlots(old)[0].busy, false);
+  const live = configFor(t);
+  writeWin32Ticket(live, {}, { ownerPid: process.pid, ageMs: 60_000 });
+  assert.equal(listHeavySlots(live)[0].busy, true, 'a live orchestrator is still launching');
+});
+
+test('waiters are served first come, first served instead of by polling luck', async (t) => {
+  const config = configFor(t, { pollMs: 1 });
+  let holder = hold(t, config, 'final first demo');
+  const order = [];
+  const sleep = () => new Promise((resolve) => setTimeout(resolve, 2));
+  const first = acquireHeavySlot({ label: 'preview older demo', config, log: () => {}, sleep })
+    .then((slot) => { order.push('older'); return slot; });
+  await waitUntil(() => listWaiters(config).length === 1, 'the older waiter queued');
+  const second = acquireHeavySlot({ label: 'preview newer demo', config, log: () => {}, sleep })
+    .then((slot) => { order.push('newer'); return slot; });
+  await waitUntil(() => listWaiters(config).length === 2, 'the newer waiter queued');
+  assert.deepEqual(listWaiters(config).map((waiter) => waiter.label), ['preview older demo', 'preview newer demo']);
+  holder.release();
+  holder = await first;
+  assert.deepEqual(order, ['older']);
+  holder.release();
+  (await second).release();
+  assert.deepEqual(order, ['older', 'newer']);
+  assert.deepEqual(listWaiters(config), []);
+});
+
+test('a dead waiter ticket is pruned and does not hold the line', async (t) => {
+  const config = configFor(t);
+  const dir = path.join(config.dir, 'waiting-heavy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${'0'.repeat(15)}-0000001-${randomUUID()}.json`), JSON.stringify({
+    label: 'crashed demo', pid: await deadPid(), hostname: os.hostname(), since: new Date().toISOString(),
+  }));
+  const silent = path.join(dir, `${'0'.repeat(14)}1-0000002-${randomUUID()}.json`);
+  fs.writeFileSync(silent, JSON.stringify({ label: 'silent demo', pid: process.pid, hostname: os.hostname() }));
+  const old = new Date(Date.now() - 120_000);
+  fs.utimesSync(silent, old, old);
+  assert.deepEqual(listWaiters(config), []);
+  const slot = acquireHeavySlotSync({ label: 'preview demo', config, log: () => {} });
+  assert.equal(slot.waited, false);
+  slot.release();
+});
+
+test('light jobs use their own lane and never wait behind a render', (t) => {
+  const config = configFor(t);
+  hold(t, config, 'final render demo');
+  for (const label of ['layer import demo', 'roughcut demo', 'master demo']) {
+    const slot = acquireHeavySlotSync({ label, config, log: () => {}, sleepSync: () => assert.fail('waited') });
+    assert.equal(slot.lane, 'light');
+    assert.equal(slot.waited, false);
+    slot.release();
+  }
+  assert.equal(tryAcquireHeavySlot({ label: 'preview demo', config }), null, 'renders still share slot-0');
+  const noLane = { ...config, lightSlots: 0 };
+  assert.equal(tryAcquireHeavySlot({ label: 'layer import demo', config: noLane }), null);
+});
+
+test('every queued job appends its wait and run time to the timing log', async (t) => {
+  const config = configFor(t);
+  const slot = acquireHeavySlotSync({ label: 'preview timing demo', config, log: () => {} });
+  slot.release();
+  slot.release();
+  const asyncSlot = await acquireHeavySlot({ label: 'layer import timing demo', config, log: () => {} });
+  asyncSlot.release();
+  const timings = readTimings(config);
+  assert.equal(timings.length, 2);
+  assert.equal(timings[0].label, 'preview timing demo');
+  assert.equal(timings[0].lane, 'heavy');
+  assert.equal(timings[1].lane, 'light');
+  for (const entry of timings) {
+    assert.ok(Number.isInteger(entry.waitedMs) && entry.waitedMs >= 0);
+    assert.ok(Number.isInteger(entry.ranMs) && entry.ranMs >= 0);
+    assert.ok(Date.parse(entry.endedAt) >= Date.parse(entry.startedAt));
+  }
+});

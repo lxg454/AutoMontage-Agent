@@ -2,7 +2,7 @@
 // the group, including tools whose immediate parent exits before they do.
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
-const { recordGroup } = require('./heavy-execution');
+const { recordGroup, recordTool } = require('./heavy-execution');
 const [serialized, command, ...args] = process.argv.slice(2);
 const { tickets, contexts, capture, deadline, maxBuffer, terminationGraceMs = 100 } = JSON.parse(serialized);
 recordGroup(tickets, process.pid);
@@ -50,6 +50,7 @@ if (process.connected) {
   });
 }
 child = spawn(command, args, { stdio: capture ? ['inherit', 'pipe', 'pipe'] : 'inherit', shell: false, env });
+if (process.platform === 'win32' && child.pid) recordTool(tickets, child.pid);
 if (capture) {
   let bytes = 0;
   for (const [source, destination] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {

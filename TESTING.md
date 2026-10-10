@@ -28,7 +28,14 @@ node --require ./tests/helpers/heavy-queue-isolation.cjs --test tests/heavy-queu
 ```
 
 Очередь и оптимизации покрывают `heavy-queue.test.js` (межпроцессное исключение,
-освобождение, мёртвый PID, таймаут, sync/async, CLI `queue` и настройки). Его реальные
+освобождение, мёртвый PID, таймаут, sync/async, CLI `queue` и настройки; порядок прихода
+ожидающих, уборка мёртвых номерков, лёгкая дорожка, журнал `timings.jsonl` и проверка PID
+Windows-ticket – последние три теста только на native Windows) и `queue-stats.test.js`
+(`automontage queue stats`). Быстрая сборка слоя – `fast-layer.test.js`: форма props, при
+которой кадр Remotion равен слою, все отказы в Remotion, команда ffmpeg и совпадение констант с
+`src/`. Её равенство Remotion на настоящих роликах замерено вручную (D-051). Контрольные кадры –
+`layer-stills.test.js`; опт-ин `AUTOMONTAGE_TEST_MOTION_RENDER=1` сравнивает кадр общего сервера
+с публичным `renderStill` попиксельно. Его реальные
 дешёвые child-process regressions завершают только собственный surrogate-owner по SIGTERM:
 child, grandchild и detached-grandchild удерживают очередь до окончания работы для обоих
 launchers. Проверяются pending intent, старый token, binary pipes, argv/env и ожидание shutdown

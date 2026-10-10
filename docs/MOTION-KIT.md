@@ -92,6 +92,9 @@ automontage layer check --project-dir projects/<ролик> --layer motion-v01
 automontage layer stock --project-dir projects/<ролик> --layer motion-v01 \
   --query "developer at laptop" --query-original "сижу за ноутбуком" --insert stock-1
 
+# 3a. Контрольные кадры входов и выходов – все одним запуском (кадры или --sec секунды)
+automontage layer stills --project-dir projects/<ролик> --layer motion-v01 --frames 30,120,450
+
 # 4. Рендер слоя и проверка готового видео
 automontage layer render --project-dir projects/<ролик> --layer motion-v01
 
@@ -128,6 +131,10 @@ automontage layer sheet --project-dir projects/<ролик>
    он не видит – они проявятся только на `layer render` и в preview.
 3. **`layer stock`** находит клип на Pexels или Pixabay, режет его под размер и FPS слоя и под длину
    вставки (`--sec`, иначе длина `--insert`, иначе 2,5 с) и кладёт в `public/stock/`. В `plan.js` его ставите вы (команда печатает, какой `src` вписать).
+   **`layer stills`** снимает контрольные кадры в `motion-v01/out/still-<кадр>.png`: слой
+   собирается один раз, кадры идут подряд в одном браузере с одним файловым сервером – около
+   1 с на кадр вместо 10–30 с у отдельного `npx remotion still` на каждый кадр. Кадры – `--frames`
+   (номера) или `--sec` (секунды × fps слоя), не больше 60 за запуск. В очередь не встаёт.
 4. **`layer render`** сначала сам повторяет `layer check`, ждёт слот общей очереди, рендерит
    слой Remotion, нормализует видео и звук и проверяет G6 и G7. Готовый файл –
    `motion-v01/renders/layer-01.mp4`, отчёт – `qa/layer-motion-v01-render-01.txt`.

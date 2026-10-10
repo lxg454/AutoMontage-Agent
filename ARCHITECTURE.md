@@ -962,9 +962,12 @@ flowchart TD
   отдельные detached-группы не убиваются по историческим PGID и продолжают удерживать слот
   через tickets до доказанного окончания. Соседний invocation остаётся жив.
   Surviving descendants и аварийное завершение supervisor всё равно защищены tickets.
-  На Windows успешный запуск может убрать свои tickets только в живом исходном оркестраторе;
-  ошибка или его смерть оставляет fail-closed блокировку до ручной проверки. Job Objects нет:
-  намеренно отделённый потомок после формально успешной Windows-команды не покрывается.
+  На Windows успешный запуск убирает свои tickets в живом исходном оркестраторе; после ошибки
+  или его смерти `executionBusy` проверяет PID из ticket: supervisor или отдельный Chromium
+  (`pgid`) и прямой инструмент (`toolPid`, его пишет `heavy-worker.js` после spawn). Занято, пока
+  жив хоть один; ticket без PID занят, пока жив оркестратор, и ещё 30 с после его смерти. Ticket
+  Windows на другой платформе – fail-closed. Job Objects нет: внук, переживший инструмент, и
+  намеренно отделённый потомок не покрываются.
   Нативная самостоятельная daemonization и удаление preload из Node env также вне контракта.
   Ожидание очереди не держит проект заблокированным.
   `AUTOMONTAGE_HEAVY_DIR` задаёт общий каталог (по умолчанию `os.tmpdir()/automontage-heavy`),
@@ -975,7 +978,15 @@ flowchart TD
   `automontage queue`: label, PID, время начала и каталог. Label содержит только
   `<задача> <имя папки проекта>[/<слой>]` (basename), без личного пути. Таймаут или нулевое
   ожидание при занятости дают `HEAVY_QUEUE_BUSY` с текстом «машина занята: …».
-  Это ограничение параллельности, а не обещание FIFO; команды вне этого протокола не учитываются.
+  Ожидание идёт по порядку прихода: `acquireHeavySlot*` пишет номерок
+  `waiting-<дорожка>/<мс>-<pid>-<uuid>.json`, обновляет его mtime каждый опрос и пробует слот,
+  только пока старших живых номерков меньше, чем свободных слотов дорожки (`listWaiters` убирает
+  номерки мёртвых PID и не тронутые 60 с). `tryAcquireHeavySlot` (`--no-wait`) порядок не ждёт.
+  Дорожка `light` (`AUTOMONTAGE_LIGHT_SLOTS`, 0–8, по умолчанию 1; слоты `light-N`) – для label
+  `layer import`, `roughcut` и `master`; остальные – `slot-N`. При освобождении слота в
+  `timings.jsonl` (ротация в `timings.1.jsonl` после 2 МБ) пишется строка label, дорожка, слот,
+  `waitedMs`, `ranMs`; `automontage queue stats` (`scripts/queue-stats.js`) сводит её по этапам.
+  Команды вне этого протокола не учитываются.
 - **`layer render`** (`scripts/layer/render.js`): сначала тот же `layer check`; затем слот
   общей машинной очереди (`scripts/heavy-queue.js`), после ожидания – повторный `layer check`.
   `--no-wait` отказывает при занятой очереди, а не обходит её. Слот берётся до project mutation
@@ -1044,6 +1055,24 @@ flowchart TD
   уменьшенном до 135 px; кадр, для которого долю не удалось посчитать, считается пустым). Если
   ffmpeg не отдал сам кадр контакт-листа, команда останавливается с ошибкой; иначе она только
   предупреждает: qa-отчёт не пишет, код 0.
+- **`layer stills`** (`scripts/layer/stills.js`) снимает контрольные кадры слоя
+  (`out/still-<кадр>.png`, `--frames` или `--sec`, до 60) через Node API Remotion: один `bundle`
+  в `out/.bundle` (удаляется после запуска), один Chromium и один файловый сервер с декодером
+  OffthreadVideo на все кадры (`RenderInternals.prepareServer` + `internalRenderStill`; без них –
+  публичный `renderStill`). Публичный `renderStill` на каждый кадр поднимал и закрывал свой
+  сервер, а на Windows `rmSync` его временной папки ждал повторов ~3,6 с. `envVariables` пустые:
+  `.env` движка в браузер не попадает. В очередь команда не встаёт.
+- **Быстрая сборка слоя** (`scripts/fast-layer.js`, `renderLayerOrRemotion`) – общий шаг рендера
+  `scripts/preview.js` и lesson final в `scripts/build.js`. Если props ReelScenes – одна сцена
+  `broll` на весь ролик со слоем `overlay: none`, `fit: cover`, без обрезки, `audioMode` `mix` или
+  `mute`, без музыки и отладки внутри композиции, а слой (probe) – H.264 yuv420p того же размера и
+  FPS не короче ролика, кадр Remotion совпадает со слоем. Тогда ffmpeg копирует видео слоя
+  (final) или накладывает метку «ЧЕРНОВИК» с перекодированием через `runH264` (preview, CRF 28), а
+  звук сводит как SceneDirector: голос исходника ×1 плюс звук слоя −18 дБ с огибающей
+  `round(0,12·fps)` кадров. Выход идёт в тот же finish.js с `--audio-advance-ms 0` (у Remotion –
+  42,5) и дальше по прежнему пути: музыка, G8, декодирование, публикация. Фрагмент preview,
+  масштаб, любая другая форма props или нечитаемый слой – прежний Remotion;
+  `AUTOMONTAGE_FAST_LAYER=off` выключает путь.
 - **Отчёты и коды.** `scripts/qa/report.js` строит отчёт (`buildReport`, статус `error` при
   любой ошибке), печатает его (`formatReport`) и пишет атомарно (`writeReport`). `layer check` и
   `layer render` возвращают 0 (пройдено или предупреждения), 1 (стоп) или 2 (оценить нельзя);

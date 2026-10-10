@@ -13,6 +13,28 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+// A pending Windows intent may still be picked up by a supervisor that started just before its
+// orchestrator died; give that launch this long to record its PID before the intent counts as dead.
+const WIN32_PENDING_GRACE_MS = 30_000;
+
+// Only ESRCH proves that a PID is gone; any other answer (EPERM, invalid PID) keeps the slot busy.
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try { process.kill(pid, 0); return true; } catch (error) { return error.code !== 'ESRCH'; }
+}
+
+// Windows has neither process groups nor kill(-pgid, 0). Its intent records the supervisor (or the
+// detached Chromium) PID and, once spawned, the direct tool PID: the work is alive while either is.
+function win32TicketBusy(ticket, owner, file) {
+  if (Number.isInteger(ticket.pgid) && ticket.pgid > 0) {
+    return pidAlive(ticket.pgid) || (ticket.toolPid !== undefined && pidAlive(ticket.toolPid));
+  }
+  // No PID yet: a live orchestrator is still launching it; a dead one may have left a supervisor
+  // that is starting right now, so the intent stays busy for a short grace period.
+  if (pidAlive(owner.pid)) return true;
+  try { return Date.now() - fs.statSync(file).mtimeMs < WIN32_PENDING_GRACE_MS; } catch (_) { return true; }
+}
+
 function executionBusy(slotDir, owner) {
   const dir = executionDir(slotDir, owner);
   let entries;
@@ -22,10 +44,16 @@ function executionBusy(slotDir, owner) {
   for (const entry of entries) {
     if (entry === 'released') continue;
     try {
-      const ticket = readJson(path.join(dir, entry));
+      const file = path.join(dir, entry);
+      const ticket = readJson(file);
+      if (ticket.token !== owner.token) return true;
+      if (ticket.platform === 'win32') {
+        // A Windows intent read on another platform cannot be checked: fail closed.
+        if (process.platform !== 'win32' || win32TicketBusy(ticket, owner, file)) return true;
+        continue;
+      }
       // Pending/partial writes, foreign platforms and permission errors fail closed.
-      if (ticket.token !== owner.token || ticket.platform === 'win32'
-        || !Number.isInteger(ticket.pgid) || ticket.pgid <= 0) return true;
+      if (!Number.isInteger(ticket.pgid) || ticket.pgid <= 0) return true;
       try { process.kill(-ticket.pgid, 0); return true; } catch (error) {
         if (error.code !== 'ESRCH') return true;
       }
@@ -72,6 +100,15 @@ function recordGroup(files, pgid) {
     const ticket = readJson(file);
     // A torn write also fails closed; work never precedes creation of the intent.
     fs.writeFileSync(file, JSON.stringify({ ...ticket, pgid }));
+  }
+}
+
+// Windows only: the supervisor adds its direct tool PID, so a killed supervisor does not free the
+// slot while an orphaned ffmpeg/Remotion keeps running.
+function recordTool(files, toolPid) {
+  for (const file of files) {
+    const ticket = readJson(file);
+    fs.writeFileSync(file, JSON.stringify({ ...ticket, toolPid }));
   }
 }
 
@@ -129,4 +166,6 @@ function managedInvocation(command, args, options = {}, { controlChannel = false
   };
 }
 
-module.exports = { executionBusy, wasReleased, registerExecutionSlot, managedInvocation, createTickets, recordGroup };
+module.exports = {
+  executionBusy, wasReleased, registerExecutionSlot, managedInvocation, createTickets, recordGroup, recordTool,
+};

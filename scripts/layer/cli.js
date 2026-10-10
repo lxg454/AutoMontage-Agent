@@ -1,5 +1,5 @@
 // scripts/layer/cli.js – запускается из scripts/cli.js через `node`, поэтому без shebang
-const USAGE = `usage: automontage layer new|words|check|render|import|brief|stock|sheet --project-dir <папка> [...]
+const USAGE = `usage: automontage layer new|words|check|render|import|brief|stock|sheet|stills --project-dir <папка> [...]
 
   layer new    --project-dir P [--dir motion-v01] [--profile avatar|live]    слой из деталей motion-kit
   layer words  --project-dir P --layer motion-v01                             слова и написание заново
@@ -10,11 +10,12 @@ const USAGE = `usage: automontage layer new|words|check|render|import|brief|stoc
   layer brief  --project-dir P --asset <assets/broll/video/…/media.mp4> --title T --head-cream C --head-orange O
                [--audio mix|mute] [--music <файл> --music-gain-db -16 --music-start-sec 0]
   layer stock  --project-dir P --layer motion-v01 --query "english" --query-original "фраза" [--insert stock-1] [--sec 2.5] [--pick 1] [--list]
-  layer sheet  --project-dir P                                                контакт-лист preview и кадры правок пульта`;
+  layer sheet  --project-dir P                                                контакт-лист preview и кадры правок пульта
+  layer stills --project-dir P --layer motion-v01 --frames 30,120 | --sec 1,4.5  контрольные кадры одним запуском`;
 
 const COMMANDS = Object.freeze({
   new: './new', words: './words', check: './check', render: './render',
-  import: './import', brief: './brief', stock: './stock', sheet: './sheet',
+  import: './import', brief: './brief', stock: './stock', sheet: './sheet', stills: './stills',
 });
 
 // check/render пишут qa-отчёт (`<проект>/qa/<имя>.json`) только когда сами дошли до его записи.

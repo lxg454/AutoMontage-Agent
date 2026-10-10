@@ -29,6 +29,7 @@ const {
   resolveProjectPath,
 } = require('./project/workspace');
 const { withPreviewMediaBundle } = require('./render-media-bundle');
+const { renderLayerOrRemotion } = require('./fast-layer');
 const { acquireHeavySlotSync, heavyQueueConfig, HEAVY_QUEUE_BUSY } = require('./heavy-queue');
 
 function parsePreviewOptions(argv) {
@@ -223,12 +224,17 @@ function runPreview(options, dependencies = {}) {
         concurrency: '50%',
         overwrite: true,
       });
-      runToolImpl(command.command, command.args, { cwd: ROOT, stage: 'preview Remotion' });
+      // Слой kit на весь ролик собирается ffmpeg за секунды (scripts/fast-layer.js), остальное – Remotion.
+      const rendered = (dependencies.renderLayerOrRemotionImpl || renderLayerOrRemotion)({
+        composition: prepared.composition, props: lease.props, publicDir: lease.publicDirectory,
+        range: prepared.range, scale, output: planned.rawPath, crf: 28, remotionCommand: command,
+        run: runToolImpl, log, stage: 'preview', remotionAudioAdvanceMs: REMOTION_AUDIO_ADVANCE_MS,
+      });
       runNodeToolImpl(path.join(ROOT, 'scripts', 'finish.js'), [
         planned.rawPath,
         planned.finishedPath,
         '--hdrfix', 'auto',
-        '--audio-advance-ms', String(REMOTION_AUDIO_ADVANCE_MS),
+        '--audio-advance-ms', String(rendered.audioAdvanceMs),
       ], { cwd: ROOT, stage: 'preview finish' });
       if (prepared.music) {
         runNodeToolImpl(path.join(ROOT, 'scripts', 'mix-music.js'), [

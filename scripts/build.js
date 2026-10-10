@@ -55,6 +55,7 @@ const {
 } = require('./project/workspace');
 const { withPublicMediaLease } = require('./public-media');
 const { withRenderMediaBundle } = require('./render-media-bundle');
+const { renderLayerOrRemotion } = require('./fast-layer');
 const { verifyBriefBrollMedia } = require('./lesson/broll-media-files');
 
 const args = process.argv.slice(2);
@@ -471,7 +472,12 @@ if (lessonAction === 'render') {
           props: lessonPropsPath,
           publicDir: lease.publicDirectory,
         });
-        runTool(renderCommand.command, renderCommand.args, { cwd: ROOT, stage: 'lesson render' });
+        // Слой kit на весь ролик – ffmpeg с копией видео слоя (scripts/fast-layer.js), иначе Remotion.
+        const rendered = renderLayerOrRemotion({
+          composition: prepared.composition, props: lease.props, publicDir: lease.publicDirectory,
+          output: rawMp4L, crf: 18, remotionCommand: renderCommand, run: runTool, log,
+          stage: 'lesson render', remotionAudioAdvanceMs: REMOTION_AUDIO_ADVANCE_MS,
+        });
 
         log('финиш (громкость + картинка)…');
         runNodeTool(path.join(ROOT, 'scripts/finish.js'), [
@@ -480,7 +486,7 @@ if (lessonAction === 'render') {
           '--hdrfix',
           'auto',
           '--audio-advance-ms',
-          String(REMOTION_AUDIO_ADVANCE_MS),
+          String(rendered.audioAdvanceMs),
         ], { cwd: ROOT, stage: 'lesson finish' });
 
         if (prepared.music) {
