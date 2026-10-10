@@ -320,8 +320,40 @@ function parseCleanOptions(argv) {
   return options;
 }
 
-function main(argv = process.argv.slice(2), { now = new Date(), log = console.log, error = console.error } = {}) {
+// `automontage clean --temp [--min-age-hours N] [--yes]` – мусор Remotion и Chromium в os.tmpdir()
+// (scripts/temp-clean.js): отчёт, удаление – с --yes. Папки моложе N часов (по умолчанию 12) не трогаются.
+function mainTemp(argv, { now, log, error, tmpDir }) {
+  const temp = require('../temp-clean');
+  let minAgeHours = temp.DEFAULT_MIN_AGE_MS / 3600_000;
+  let yes = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const key = argv[index];
+    if (key === '--temp') continue;
+    if (key === '--yes') { yes = true; continue; }
+    if (key === '--min-age-hours') {
+      minAgeHours = Number(argv[index + 1]);
+      index += 1;
+      if (!Number.isInteger(minAgeHours) || minAgeHours < 1) throw new Error('--min-age-hours – целое число часов ≥ 1');
+      continue;
+    }
+    throw new Error(`неизвестная опция clean --temp: ${key}`);
+  }
+  const entries = temp.planTempCleanup({ tmpDir, minAgeMs: minAgeHours * 3600_000, now: now.getTime() });
+  const bytes = entries.reduce((sum, entry) => sum + temp.directorySize(entry.path), 0);
+  log(`Временные папки Remotion и Chromium старше ${minAgeHours} ч в ${tmpDir}: ${entries.length} шт., ${formatSize(bytes)}`);
+  if (!yes) {
+    if (entries.length) log('Чтобы удалить, повторите с --yes. Папки движка automontage-* и папки моложе срока не трогаются.');
+    return 0;
+  }
+  const result = temp.applyTempCleanup(entries);
+  for (const item of result.failed) error(`  не удалена ${item.path}: ${item.code} (занята – удалится в следующий раз)`);
+  log(`Удалено ${result.removed} папок, освобождено ${formatSize(bytes)}`);
+  return 0;
+}
+
+function main(argv = process.argv.slice(2), { now = new Date(), log = console.log, error = console.error, tmpDir = require('node:os').tmpdir() } = {}) {
   try {
+    if (argv.includes('--temp')) return mainTemp(argv, { now, log, error, tmpDir });
     const options = parseCleanOptions(argv);
     const plan = planCleanup(options.projectsDir, { level: options.level, minAgeDays: options.minAgeDays, now });
     log(`Чистка готовых роликов (уровень ${options.level}) – ${options.projectsDir}`);

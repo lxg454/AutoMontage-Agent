@@ -219,6 +219,15 @@ lease ставит `confirmed` с `confirmedAt`/`confirmedBy` только дл�
 заново строит план каждого проекта, удаляет только файлы из обоих планов, обычные и внутри
 проекта, и собирает ошибки отдельных файлов в отчёт вместо остановки.
 
+`automontage clean --temp` и автоматическая чистка (`scripts/temp-clean.js`) убирают из
+`os.tmpdir()` только каталоги-не-ссылки по шаблонам `remotion-v*-assets`,
+`remotion-webpack-bundle-*`, `puppeteer_dev_chrome_profile-*`, `react-motion-render*` старше 12 ч
+(`--min-age-hours`). На Windows Remotion не может удалить папку файлового сервера, пока её держит
+декодер OffthreadVideo, и она остаётся после каждого рендера. Автоматика вызывается при
+освобождении слота очереди (`timed` в `scripts/heavy-queue.js`), не чаще раза в час по метке
+`temp-sweep.json` в папке очереди, без повторов удаления и без влияния на задачу при ошибке;
+`AUTOMONTAGE_TEMP_CLEAN=off` её выключает, тестовый preload выключает всегда.
+
 Монтаж из нескольких дублей использует ту же границу. `scripts/project/takes.js` импортирует
 дубли в `input/takes/`, расшифровывает каждый в `transcript/takes/take-NN.json` и регистрирует их в
 `project.json.takes`; первым дублем становится исходный файл проекта. `scripts/project/takes-pack.js`

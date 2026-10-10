@@ -290,6 +290,8 @@ function timed(slot, { config, label, waitStartedAt }) {
         waitedMs: acquiredAt - waitStartedAt, ranMs: endedAt - acquiredAt,
         startedAt: new Date(acquiredAt).toISOString(), endedAt: new Date(endedAt).toISOString(),
       });
+      // Мусор Remotion в TEMP (scripts/temp-clean.js): не чаще раза в час, ошибки не мешают задаче.
+      require('./temp-clean').sweepEngineTempThrottled({ queueDir: config.dir });
     },
   };
 }

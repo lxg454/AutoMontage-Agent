@@ -331,7 +331,14 @@ node scripts/build.js projects/<id>/input/source.mp4 --template lesson \
 automontage clean                     # отчёт, уровень renders
 automontage clean --yes               # удалить по отчёту
 automontage clean --level archive     # отчёт по более глубокой чистке
+automontage clean --temp              # мусор Remotion и Chromium во временной папке системы
+automontage clean --temp --yes        # удалить его (папки моложе 12 ч не трогаются)
 ```
+
+На Windows Remotion оставляет после каждого рендера папку `remotion-v*-assets` во временной папке
+системы: за неделю это десятки гигабайт. Движок сам удаляет такие папки (и бандлы webpack,
+профили Chromium) старше 12 часов после каждой задачи очереди, не чаще раза в час; выключить –
+`AUTOMONTAGE_TEMP_CLEAN=off`. Свои папки `automontage-*` и очередь он не трогает.
 
 Трогаются только ролики со статусом «Готов» в пульте: финал собран по текущему утверждённому ТЗ,
 новых правок нет, проект не менялся больше 3 дней (`--min-age-days`) и в нём не идёт работа.
@@ -593,6 +600,7 @@ PID supervisor, самого инструмента и отдельного Chro
 | `AUTOMONTAGE_HEAVY_DIR` | Общая для всех запусков папка очереди; по умолчанию `os.tmpdir()/automontage-heavy`. Разные папки создают независимые очереди. |
 | `AUTOMONTAGE_HEAVY_WAIT_MS` | Целое ≥ 0 в миллисекундах; по умолчанию 10800000 (3 ч), 0 – немедленный отказ при занятости. |
 | `AUTOMONTAGE_LIGHT_SLOTS` | Целое 0–8, по умолчанию 1: отдельные слоты для `layer import`, `roughcut` и `master`, чтобы они не стояли за рендером; 0 – общие слоты. |
+| `AUTOMONTAGE_TEMP_CLEAN` | `auto` (по умолчанию) или `off`: после задачи очереди, не чаще раза в час, удалять мусор Remotion и Chromium старше 12 ч во временной папке системы. |
 | `AUTOMONTAGE_FAST_LAYER` | `auto` (по умолчанию) или `off`: ролик из одного полноэкранного слоя kit собирается в preview и final через ffmpeg без Remotion. |
 
 Очередь обслуживает задачи по порядку прихода: каждая ждущая команда держит номерок в

@@ -253,7 +253,7 @@ automontage inbox                       # правки и утверждения
 automontage roughcut --project-dir <p> --edit edit/roughcut-v01.json  # черновая нарезка для автора
 automontage roughcut confirm --project-dir <p>  # «нарезка готова» – только по словам автора
 automontage queue                       # состояние очереди тяжёлых задач
-automontage clean                       # отчёт, что можно удалить у готовых роликов; --yes удаляет
+automontage clean                       # отчёт, что можно удалить у готовых роликов; --yes удаляет; --temp – мусор Remotion в TEMP
 ```
 
 Боевые команды и проверки lesson-процесса описаны в `docs/TEMPLATES.md` и `TESTING.md`,

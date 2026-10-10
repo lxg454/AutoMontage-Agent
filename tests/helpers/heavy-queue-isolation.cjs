@@ -12,3 +12,7 @@ if (process.env.NODE_TEST_CONTEXT || !process.env.AUTOMONTAGE_HEAVY_DIR) {
 // Видеокарта выключена во всех тестах: команды ffmpeg и Remotion не зависят от того, есть ли на машине
 // NVIDIA. Ветку NVENC проверяют отдельные тесты, передавая nvenc явно.
 process.env.AUTOMONTAGE_GPU = 'off';
+
+// Автоматическая чистка TEMP после задач очереди (scripts/temp-clean.js) в тестах выключена: тест не
+// должен удалять настоящие временные папки машины. Её проверяет tests/temp-clean.test.js.
+process.env.AUTOMONTAGE_TEMP_CLEAN = 'off';
